@@ -1,0 +1,1981 @@
+<!---
+  Debug_console_window
+  Unit_testing_infrastructure
+  Global_alises_and_functions
+  Ticker_class 
+  Entity_class 
+  The_map 
+  The_models 
+  Face_object 
+  Group_object 
+  Vertex_transforms
+  Matrix_library
+  Score_DB
+  Main
+-->
+<html>
+<head>
+ <style>
+   body {background:black}
+   p#info {background:black; color:#0f0}
+   p#info > p {margin:0}
+   .off {display:none}
+ </style>
+</head>
+<body>
+ <p tabindex="0" id="pcanvas" style="height:98%; width:100%; border:thin solid #008">
+   <canvas tabindex="1" id="mycanvas" width="500" height="500" style="border:solid thin #800">
+   </canvas>
+   hmm
+ </p>
+ <p class="off" id="info" style="height:10em"></p>
+</body><script>
+
+
+var stars=document.createElement("img");
+stars.src="stars.jpg";
+var starsr=document.createElement("img");
+starsr.src="starsr.jpg";
+
+/***************************************
+  Debug_console_window
+  Usage::
+    <yourtag id="info"> -- Set the element's ID
+    DB("string")        -- Text to append on a newline
+    mousedown           -- Toggles/freezes output
+***************************************/
+var DB = (function () {
+  // Locals
+  var InfoElement = document.getElementById('info');
+  var enabled = true;
+  // Constructor
+  InfoElement.tabindex=1;
+  InfoElement.contentEditable=true;
+  InfoElement.style.overflow="auto";
+  InfoElement.style.fontFamily="monospace";
+  InfoElement.onmousedown = function () { // When mouse clicked, toggle functionality
+    DB(!enabled);
+  }
+  function arrayToString (o) {
+    var buff = "";
+    if (o == undefined) o = "";
+    if (Array == o.constructor) {
+      buff += "["
+      for (var i=0; i<o.length; ++i) {
+        if (0 < i) buff += ",";
+        buff += arrayToString(o[i]);
+      }
+      buff += "]"
+    } else {
+      buff += o;
+    }
+    return buff;
+  }
+  return function (s, o) {
+    if (s === false) { enabled = false; InfoElement.innerText += " [DISABLED]"; }
+    if (s === true)  { enabled = true; InfoElement.innerText += " [ENABLED]"; }
+    if (enabled) {
+      //InfoElement.appendChild(document.createTextNode(o));
+      var e = document.createElement("p");
+      e.innerText = s + arrayToString(o);
+      InfoElement.appendChild(e);
+      InfoElement.scrollTop = InfoElement.scrollHeight;
+    }
+  }
+})();
+
+
+
+/***************************************
+  Unit_testing_infrastructure
+  assert(ex)          return true -or- false when exp is false along with a message to console.log
+  TESTCmpAry(a, b)    Verify array a and b match (both in size and content)
+  TESTCmpAryAry(a, b) Verify array a and b match including the sub-arrays
+***************************************/
+function assert (exp) {
+  if (exp) {
+    return true;
+  } else {
+    console.log("ERROR!");
+    return false;
+  }
+}
+
+function TESTCmp (a, b) {
+  if (typeof a == "number") TESTCmpNumNum(a,b)
+  else assert(a == b);
+}
+
+function TESTCmpNumNum (a, b) {
+  //assert(a.toFixed(6) == b.toFixed(6));
+  var n = a.toFixed(6);
+  var m = b.toFixed(6);
+  if (n == "-0.000000") n = "0.000000";
+  if (m == "-0.000000") m = "0.000000";
+  assert(n == m);
+}
+
+function TESTCmpObj (a, b) {
+  for (var s in a) TESTCmp(a[s], b[s]);
+}
+
+function TESTCmpAry (a, b) {
+  var i;
+  TESTCmpNumNum(a.length, b.length);
+  for (i=0; i<a.length; ++i) TESTCmpNumNum(a[i], b[i]);
+}
+
+function TESTCmpAryAry (a, b) {
+  var i;
+  assert(a.length == b.length);
+  for (i=0; i<a.length; ++i) TESTCmpAry(a[i], b[i]);
+}
+
+
+
+/***************************************
+  Global_alises_and_functions
+***************************************/
+var rnd = function(n){return Math.floor(Math.random()*n)}
+var sin = Math.sin;
+var cos = Math.cos;
+var abs = Math.abs;
+var square = function (x) {return x*x;}
+var getTime = function () { return (new Date).getTime(); }
+var eqpair = function (a, b) {return a.x==b.x && a.y==b.y;}
+var setLoc = function (a, b) {a.x=b.x;  a.y=b.y;  a.z=b.z;}
+function copyAryAry (a) {
+  var i, b = a.slice(0);
+  for (i=0; i<b.length; ++i) b[i] = b[i].slice(0);
+  return b;
+}
+var PI=Math.PI;
+var PIx2 = PI*2;
+
+
+
+/***************************************
+  Ticker_class - Keeps track of time for
+  linear interpolation.  Returns a value
+  between 0 and 1.
+***************************************/
+function Ticker () {
+  this.beg = getTime();
+  this.span = 1000;
+  this.end = this.beg + this.span;
+  this.reset = function (newbeg, newspan) {
+    this.beg = newbeg;
+    this.span = newspan;
+    this.end = this.beg + this.span;
+  }
+  this.tick = function (time) {
+    var p = (time - this.beg) / this.span;
+    return (1 < p) ? 1 : p;
+  }
+}
+//** TEST **********************************************************************
+(function TESTTicker () {
+  var ticker = new Ticker(), p;
+  ticker.reset(0, 11);
+  p=ticker.tick(0); console.log("tick.tick() = " + p);TESTCmpNumNum(p, 0);
+  p=ticker.tick(1); console.log("tick.tick() = " + p);TESTCmpNumNum(p, 0.090909);
+  p=ticker.tick(5.5); console.log("tick.tick() = " + p);TESTCmpNumNum(p, 0.5);
+  p=ticker.tick(10); console.log("tick.tick() = " + p);TESTCmpNumNum(p, 0.909091);
+  p=ticker.tick(11); console.log("tick.tick() = " + p);TESTCmpNumNum(p, 1);
+  p=ticker.tick(12); console.log("tick.tick() = " + p);TESTCmpNumNum(p, 1);
+  console.log("PASS TESTTicker");
+}());
+//******************************************************************************
+
+
+
+/***************************************
+  Entity_class - Models a position and direction
+  with the ability to rotate and walk incrementally.
+***************************************/
+function Entity (label, aryam, dir0) {
+  this.label = label;
+  this.mode = 0; // 0 = pacman   1 = ghost
+
+  this.locticker = new Ticker();
+  this.locfr = {x:aryam[0], y:aryam[1], z:aryam[2]}; // Initial position, beginning tick range
+  this.locam = {x:aryam[0], y:aryam[1], z:aryam[2]}; // Actual location, ticking to locbe
+  this.locbe = {x:aryam[0], y:aryam[1], z:aryam[2]}; // Final position, end of tick range
+  this.locgo = false;                                // Next potential position (based on dirgo)
+
+  this.dirticker = new Ticker();
+  this.dirfr = dir0; // Initial direction, beginning of tick range
+  this.diram = dir0; // Actual direction, ticking to dirbe
+  this.dirbe = dir0; // Final direction, end of tick range
+  this.dirgo = false; // Future direction for the next tick range
+  this.speed = (label=="pacman") ? 200 : 1000-rnd(700);
+
+  /* Get the cardinal distance between dirfr and dirbe [0-8).  dirfr and dirbe should be [0-8).
+  */
+  this.dirToAngle = function () {
+    return (this.dirbe - this.dirfr + 8) % 8;
+  }
+  /* The direction relative to the current direction 'dirbe' plus delta.  delta = [2=left 4=reverse 6=right]
+  */
+  this.deltaToDir = function (delta) {
+    return (this.dirbe + delta + 8) % 8;
+  }
+  /* The location relative to the current location plus delta
+  */
+  this.locPlusDir = function (loc, dir) {
+    //if (dir==0) return {x:loc.x + 1, y:loc.y,     z:loc.z};
+    //if (dir==4) return {x:loc.x - 1, y:loc.y,     z:loc.z};
+    //if (dir==2) return {x:loc.x,     y:loc.y + 1, z:loc.z};
+    //if (dir==6) return {x:loc.x,     y:loc.y - 1, z:loc.z};
+    return {x:loc.x + cos(dir/8*PIx2), y:loc.y + sin(dir/8*PIx2), z:loc.z};
+    return loc;
+  }
+  /* Return solid/not-solid of the location at locbe in the delta direction
+  */
+  this.dirToMapIsSolid = function (dir) {
+    var loc = this.locPlusDir(this.locbe, dir);
+    return mapIsSolid(loc.x, loc.y);
+  }
+  this.deltaToMapIsSolid = function (delta) {
+    return this.dirToMapIsSolid(this.deltaToDir(delta));
+  }
+    
+  /* Test if locam has finally ticked its way to locbe
+  */
+  this.isLocamLocbe = function () {
+    return this.locam.x == this.locbe.x &&
+           this.locam.y == this.locbe.y &&
+           this.locam.z == this.locbe.z;
+  }
+  /* Slowly translate the Entity to the new location: locam = [locfr -> locbe]
+  */
+  this.tickLocation = function (time) {
+    var p = this.locticker.tick(time); // p goes from 0 to 1
+    if (p < 1) {
+      var distx = this.locbe.x - this.locfr.x;
+      var disty = this.locbe.y - this.locfr.y;
+      var distz = this.locbe.z - this.locfr.z;
+      var newx = this.locfr.x + (p * distx);
+      var newy = this.locfr.y + (p * disty);
+      var newz = this.locfr.z + (p * distz);
+      this.locam.x = newx;
+      this.locam.y = newy;
+      this.locam.z = newz;
+    } else {
+      setLoc(this.locam, this.locbe);
+    }
+  }
+  /* Update entity's location state.  If dirbe points at a valid spot relative to locbe,
+     then it updates location
+  */
+  this.tockLocation = function (time) {
+    if (this.isLocamLocbe()) {
+      var loc = this.locPlusDir(this.locbe, this.dirbe);
+      if (!mapIsSolid(loc.x, loc.y)) {
+        setLoc(this.locfr, this.locam);
+        setLoc(this.locbe, loc);
+        this.locticker.reset(time, this.speed);
+        this.locgo = false; // Special hack for ghosts so they choose only 1 new dir each tock
+      } else {
+        //if (this.label == "pacman") this.randomDirection();
+      }
+    }
+  }
+  /* Slowly rotate the Entity to the new direction  diram = [dirfr -> dirbe]
+     Rotation movement preceeds location movement.  So the entity turns in the
+     direction of the next location, not the current.
+  */
+  this.tickDirection = function (time) {
+    var p = this.dirticker.tick(time);
+    if (p < 1) {
+      var dist = this.dirToAngle(); // Modulo distance [0-8) of dirfr -> dirbe
+      var sdist = (4 <= dist) ? dist-8 : dist;  // signed distance (-4 4]
+      this.diram = (this.dirfr + p * sdist + 8) % 8;
+    } else {
+      this.diram = this.dirbe;
+    }
+  }
+  /* Update entity's direction state.  dirgo, set externally via turnByDelta(), and
+     locbe together determine if the rotation should occur.
+  */
+  this.tockDirection = function (time) {
+    if (false !== this.dirgo && !this.dirToMapIsSolid(this.dirgo)) {
+      this.dirfr = this.diram;
+      this.dirbe = this.dirgo;
+      this.dirgo = false;
+      this.dirticker.reset(time, 500);
+    }
+  }
+  /*  Entity sets dirgo to a random location relative to locbe if it's not solid
+      Try each delta direction and update dirgo if the turn can be done at dirbe, the next spot.
+  */
+  this.randomDirection = function () {
+    if (false === this.locgo) {
+      var deltas = [[0,2,6,4],[0,6,2,4],
+                    [6,0,2,4],[2,0,6,4],
+                    //[6,2,0,4],[2,6,0,4]  ignore these to give more emphasis on moving forward
+                   ][rnd(4)];
+      while (deltas.length) {
+        var dir = this.deltaToDir(deltas.shift());
+        if (!this.dirToMapIsSolid(dir)) {
+          this.dirgo = dir;
+          this.locgo = true;
+          break;
+        }
+      }
+    }
+  }
+  /* Called whenever an incremental change in location and direction needs to occur
+      tick is a value [0,1].  A 1 tells it to prepare for a new time slice which means
+      set the 'be's to 'go's.
+  */
+  this.tick = function (time) {
+    if (label == "ghost") this.randomDirection(); // For ghosts mainly
+
+    this.tickDirection(time); // Turn a little bit from diram to dirbe
+    this.tickLocation(time); // Translate a little from locam to locbe
+
+    this.tockDirection(time);
+    this.tockLocation(time);
+  }
+  /* Translate given a delta relative to locam.  0=forward 2=left 4=reverse 6=right.
+     Only affects location.
+  */
+  this.walkInDirection = function (delta)  {
+    var newdir = this.deltaToDir(delta);
+    if (0==newdir) this.locbe.x++; else
+    if (2==newdir) this.locbe.y++; else
+    if (4==newdir) this.locbe.x--; else
+    if (6==newdir) this.locbe.y--;
+  }
+  /* Set new direction given a delta relative to diram.  left=2 right=6 back=4.
+     Only affects desired direction.  Actual movement and rotation occurs during tick.
+  */
+  this.turnByDelta = function (delta)  {
+    this.dirgo = this.deltaToDir(delta);
+  }
+  /* Debug stuff.
+  */
+  this.dump = function () {
+    console.log(label + "  " +
+                "fr=(" + locfr.x + " " + locfr.y + " " + locfr.z + ")" + "  " +
+                "am=(" + locam.x + " " + locam.y + " " + locam.z + ")" + "  " +
+                "be=(" + locbe.x + " " + locbe.y + " " + locbe.z + ")");
+  }
+}
+//** TEST **********************************************************************
+(function TESTEntityTick () {
+  var ent = new Entity("ent", [1, 2, 3], 0); // Start off at 1,2,3 dir=0
+  var newdir;
+
+  // Rotate from 0 to 1
+  ent.dirticker.reset(0, 1000);  ent.dirbe=2;
+  ent.tickDirection(100);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 0.2);
+  ent.tickDirection(200);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 0.4);
+  ent.tickDirection(210);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 0.42);
+  ent.tickDirection(500);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 1.0);
+  ent.tickDirection(900);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 1.8);
+  ent.tickDirection(999);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 1.998);
+  ent.tickDirection(1000);  console.log(ent.diram); TESTCmpNumNum (ent.diram, 2);
+  ent.tickDirection(1010);  console.log(ent.diram); TESTCmp(ent.diram, 2);
+
+  // Rotate 0 to 7
+  ent.dirticker.reset(0, 1000);  ent.dirbe=7;
+  ent.tickDirection(100);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 7.9);
+  ent.tickDirection(200);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 7.8);
+  ent.tickDirection(210);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 7.79);
+  ent.tickDirection(500);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 7.5);
+  ent.tickDirection(900);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 7.1);
+  ent.tickDirection(999);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 7.001);
+  ent.tickDirection(1000);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 7);
+  ent.tickDirection(1010);  console.log(ent.diram); TESTCmp(ent.diram, 7);
+
+  // Rotate 7 to 1
+  ent.dirticker.reset(0, 1000);  ent.dirfr=7;  ent.dirbe=1;
+  ent.tickDirection(100);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 7.2);
+  ent.tickDirection(200);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 7.4);
+  ent.tickDirection(210);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 7.42);
+  ent.tickDirection(500);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 0);
+  ent.tickDirection(900);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 0.8);
+  ent.tickDirection(999);  console.log(ent.diram); TESTCmpNumNum(ent.diram, 0.998);
+  ent.tickDirection(1010);  console.log(ent.diram); TESTCmp(ent.diram, 1);
+
+  var newloc;
+  ent.locticker.reset(0, 1000);
+  ent.locbe.x = 10;
+  ent.locbe.y = 12;
+  console.log("Moving from [" + ent.locam.x + "," + ent.locam.y + "] to [" + ent.locbe.x + "," + ent.locbe.y + "]" );
+  ent.tickLocation(0);    console.log([ent.locam.x, ent.locam.y]); TESTCmpAry([ent.locam.x, ent.locam.y], [1, 2]);
+  ent.tickLocation(100);  console.log([ent.locam.x, ent.locam.y]); TESTCmpAry([ent.locam.x, ent.locam.y], [1.9, 3]);
+  ent.tickLocation(200);  console.log([ent.locam.x, ent.locam.y]); TESTCmpAry([ent.locam.x, ent.locam.y], [2.8, 4]);
+  ent.tickLocation(210);  console.log([ent.locam.x, ent.locam.y]); TESTCmpAry([ent.locam.x, ent.locam.y], [2.89, 4.1]);
+  ent.tickLocation(500);  console.log([ent.locam.x, ent.locam.y]); TESTCmpAry([ent.locam.x, ent.locam.y], [5.5, 7]);
+  ent.tickLocation(510);  console.log([ent.locam.x, ent.locam.y]); TESTCmpAry([ent.locam.x, ent.locam.y], [5.59, 7.1]);
+  ent.tickLocation(999);  console.log([ent.locam.x, ent.locam.y]); TESTCmpAry([ent.locam.x, ent.locam.y], [9.991, 11.99]);
+  ent.tickLocation(1000);  console.log([ent.locam.x, ent.locam.y]); TESTCmpAry([ent.locam.x, ent.locam.y], [10, 12]);
+  ent.tickLocation(1001);  console.log([ent.locam.x, ent.locam.y]); TESTCmpAry([ent.locam.x, ent.locam.y], [10, 12]);
+
+  console.log("PASS TESTEntityTick");
+}());
+//******************************************************************************
+
+
+
+/***************************************
+  The_map representing the playing field.  Origin
+  is bottom left of this array = map[0][0].  Convert an array of
+  strings to a grid of numbers.
+***************************************/
+var cmap = [
+  "T                                                              T",
+  "               xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx      ",
+  "          xxxxxxxxxxxxxxxxxxxxgxxxxxxxxxxxxxxxxxxxxgxxxxxxxx    ",
+  "       xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   ",
+  "      xxxxgxxxxxxxxxxxx                        xxxxxxxxxxxxxx   ",
+  "     xxxxxxxx                                         xxxgxxx   ",
+  "    xxxxxxx                                           xxxxxxx   ",
+  "   xxxxxxx                                           xxxxxxx    ",
+  "   xxxxx                                             xxxxxxx    ",
+  "  xxxxxx                                            xxxxxx      ",
+  "  xxxxx                                            xxxxxx       ",
+  "  xxgxx                                            xxxxx        ",
+  "  xxxxx                                          xxxxxx         ",
+  "   xxxxx                                         xxgxxx         ",
+  "   xxxxx                                        xxxxxxx         ",
+  "   xxxxx                                        xxxxxx          ",
+  "    xxxxx                                       xxxxxx          ",
+  "    xxxxx                                      xxxxxx           ",
+  "     xxxxx                                     xxxxxx           ",
+  "      xxxxx                                   xxxxxx            ",
+  "       xxxxx                                 xxxxxx             ",
+  "         xxxxx                               xxxxxx             ",
+  "          xxxxxxxx                          xxxxxx              ",
+  "          xxxxxxxxxxxx                     xxxgxx               ",
+  "           xxxxxgxxxxxx                   xxxxxxx               ",
+  "              xxxxxxxxxxx                 xxxxxx                ",
+  "                  xxxxxxxxx              xxxxxxx                ",
+  "                     xxxxxxxxx          xxxxxxxx                ",
+  "                        xxxxxxx        xxxgxxxx                 ",
+  "                          xxxxxx       xxxxxxx                  ",
+  "                           xxxxx     xxxxxxx                    ",
+  "                           xxxxx   xxxxxxxx                     ",
+  "                        xxxxxxxxxxxxxxxx                        ",
+  "                   xxxxxxxxxxxxxxxxxxx                          ",
+  "                xxxxxxxxxxxxxxxxxxx                             ",
+  "             xxxxxxxxxxxx   xxxx                                ",
+  "           xxxxxxxxxxx      xxxxx                               ",
+  "          xxxxgxxxx         xxxxxxxxxxxxxxxxxxxxxxxxxx          ",
+  "         xxxxxxxx            xxxxxxgxxxxxxxxgxxxxxxxxxxxxx      ",
+  "        xxxxxxx                xxxxxxxxxxxxxxxxxxxxxxxxxxxxx    ",
+  "       xxxxxxx                                     xxxxxxxxx    ",
+  "      xxxxxxx                                        xxxxxxxxx  ",
+  "     xxxgxxx                                          xxxxgxxx  ",
+  "     xxxxxx                                            xxxxxxx  ",
+  "    xxxxxx                                             xxxxxxx  ",
+  "    xxxxxx                                             xxxxxxx  ",
+  "    xxxxx                                               xxxxxxx ",
+  "    xxxxx                                               xxxxxxx ",
+  "    xxxx                                                xxxxxxx ",
+  "    xxxx                                                xxxxxxx ",
+  "   xxxxx                                               xxxxgxx  ",
+  "   xxxxx                                               xxxxxxx  ",
+  "   xxxxx                                               xxxxxxx  ",
+  "   xxxx                                               xxxxxxx   ",
+  "   xxxxxx                                             xxxxxxx   ",
+  "   xxxxxxx                                           xxxxxxx    ",
+  "   xxxxxxxxxx                                       xxxgxxx     ",
+  "   xxxxxxxxxxx                                     xxxxxxx      ",
+  "   xxxxx xxxxxxx                                  xxxxxxx       ",
+  "   xxxxx  xxxxxxxx                              xxxxxxxx        ",
+  "   xxxxx    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx         ",
+  "   xxxxx      xxxxxxxxxxgxxxxxxxxxxxgxxxxxxxxxgxxxxxx           ",
+  "   xxxxx          xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx              ",
+  "T  xxsxx                                                       T"
+].reverse();
+var mapWidth=cmap[0].length, mapHeight=cmap.length;
+var map=[];
+for (var y=0; y<mapHeight; ++y) {
+  map[y] = [];
+  for (var x=0; x<mapWidth; ++x) {
+    var c=0;
+    if (cmap[y].charAt(x) == " " && !rnd(16)) c = 2;
+    else if (cmap[y].charAt(x) == "x") c = 3;
+    else if (cmap[y].charAt(x) == "s") c = 4;
+    else if (cmap[y].charAt(x) == "g") c = 5;
+    else if (cmap[y].charAt(x) == "|") c = 9;
+    else if (cmap[y].charAt(x) == "T") c = 6;
+    map[y][x] = c;
+  }
+}
+    
+var mapWithin = function (x, y) { return (0<=x) && (x<mapWidth) && (0<=y) && (y<mapHeight); }
+var mapIsSolid = function (x, y) { return false && mapWithin(x,y) && 5 != map[y|0][x|0] && 3 != map[y|0][x|0]; }
+var mapIsPill  = function (x, y) { return mapWithin(x,y) && 1 == map[y|0][x|0]; }
+
+
+
+/***************************************
+  The_models Model specification's are functionally generated of the form:
+
+  ["label",                                           Name of model
+   [vertices],                                        Array of vertices
+   [[label, fillColor, edgeColor], vertexIndex,...],  A polygon representing a face of the object
+   ...                                                More faces
+  ]
+
+  These need to be compiled into model objects for consumption by this program.
+
+  I tried representing objects within a unit volume.  I'll now try a normalized volume which
+  is defined starting at the origin and extending no more than 1 in any direction.
+
+  Instead of an array of faces containing a convex volume, an array of vertices and a separate
+  array of faces composed of indices into the vertex array.  I wonder if this is the definition
+  of a mesh.
+***************************************/
+function pspecGenerateUnitCube (name, fill, edge) {
+  var s=.5
+  var vertices=[
+    //Bottom corners
+    //    0           1            2            3
+    [-s, -s, 0], [ s, -s, 0], [ s,  s, 0], [-s,  s, 0],
+    //Top corners
+    //    4           5            6            7
+    [-s, -s, 1], [ s, -s, 1], [ s,  s, 1], [-s,  s, 1]];
+  return [name, vertices,
+    [["bottom",fill, edge], 0,  1,  2,  3],
+    [["top",   fill, edge], 07,06, 05, 04],
+    [["front", fill, edge], 1,  0, 04, 05],
+    [["left",  fill, edge], 0,  3, 07, 04],
+    [["back",  fill, edge], 3,  2, 06, 07],
+    [["right", fill, edge], 2,  1, 05, 06]];
+}
+
+function pspecGenerateUnitFloor (name, fill, edge) {
+  var s=.5
+  return [ "floor", // Label
+   // Vertices
+     [[-s, -s, 0],  // 0
+      [ s, -s, 0],  // 1
+      [ s,  s, 0],  // 2
+      [-s,  s, 0]],  // 3
+   // Faces
+    [["face", fill, edge], 0, 3, 2, 1]];
+}
+
+function pspecGenerateUnitPyramid (name, fill, edge) {
+  var s=.5
+  var fill=fill, edge=edge; // colors
+  return [ "pyramid", // Label
+   // Vertices
+     [[-s, -s, 0],  // 0 Bottom corners of pyramid
+      [ s, -s, 0],  // 1
+      [ s,  s, 0],  // 2
+      [-s,  s, 0],  // 3
+      [ 0,  0, 1]], // 4 Tip of pyramid
+   // Faces
+    //[["bottom", fill, edge], 0, 1, 2, 3],
+    [["front",  fill, edge],  1, 0, 4],
+    [["left", fill, edge],   0, 3, 4],
+    [["back", fill, edge],   3, 2, 4],
+    [["right", fill, edge],  2, 1, 4]]
+}
+
+var pspec_grass = pspecGenerateUnitFloor("grass", "#080f", "#0000");
+var pspec_gravel0 = pspecGenerateUnitPyramid("gravel", "#f21f", "#0000");
+var pspec_gravel1 = pspecGenerateUnitPyramid("gravel", "#2f1f", "#0000");
+var pspec_gravel2 = pspecGenerateUnitPyramid("gravel", "#12ff", "#0000");
+var pspec_road = pspecGenerateUnitFloor("road", "#ffff", "#ffff");
+var pspec_wall    = pspecGenerateUnitCube("wall", "#008f", "#000f");
+var pspec_maze    = pspecGenerateUnitCube("maze", "#88f2", "#00ff");
+var pspec_iotower = pspecGenerateUnitPyramid("iotower", "#800f", "#f00f");
+var pspec_pill =    pspecGenerateUnitCube("pill", "#fff9", "#ffff");
+var pspec_power =   pspecGenerateUnitCube("power", "#ff08", "#ff0f");
+
+var pspec_simple = (function () {
+  return [
+    "simple",                    // Name/label
+    //   0        1        2     // Vertices
+    [[-1,0,0], [1,0,0], [0,1,0]],
+    [["triangle", "#0f0", "#f0f"], 0, 1, 2]]; // First and only face
+})();
+
+
+/* generate a ghost
+*/
+var pspec_ghost = (function () {
+  var fill="#f0fa", feye="#f008", edge="#000f";
+  var vectors = [
+      [0, 0, .8],    // a0  0
+      [-.2, -.2, .7],// a1  1
+      [-.2, .2, .7], // b1  2
+      [.2, .2, .7],  // c1  3
+      [.2, -.2, .7], // d1  4
+     [-.3,  0, .5], // a2  5
+     [  0, .3, .5], // b2  6
+     [.3,   0, .5], // c2  7
+     [ 0, -.3, .5], // d2  8
+      [-.24, -.24, .5], // aa2 9
+      [-.24,  .24, .5], // bb2 10
+      [ .24,  .24, .5], // cc2 11
+      [ .24, -.24, .5], // dd2 12
+     [-.3,   0, .0], // a3 13
+     [  0,  .3, .0], // b3 14
+     [ .3,  .0, .0], // c3 15
+     [  0, -.3, .0], // d3 16
+      [-.24, -.24, .0], // aa3 17
+      [-.24,  .24, .0], // bb3 18
+      [ .24,  .24, .0], // cc3 19
+      [ .24, -.24, .0]];// dd3 20
+  return ["ghost", vectors,
+    [["topa", fill, edge], 0, 1, 2],
+    [["topb", fill, edge], 0, 2, 3],
+    [["topc", fill, edge], 0, 3, 4],
+    [["topd", fill, edge], 0, 4, 1],
+
+    [["mida", fill, edge], 2, 1, 5],
+    [["midb", fill, edge], 3, 2, 6],
+    [["midc", fill, edge], 4, 3, 7],
+    [["midd", fill, edge], 1, 4, 8],
+
+    [["midaal", feye, edge], 1, 9, 5],
+    [["midbbl", fill, edge], 2, 10, 6],
+    [["midccl", fill, edge], 3, 11, 7],
+    [["midddl", fill, edge], 4, 12, 8],
+
+    [["midaar", fill, edge], 1, 8, 9],
+    [["midbbr", feye, edge], 2, 5, 10],
+    [["midccr", fill, edge], 3, 6, 11],
+    [["midddr", fill, edge], 4, 7, 12],
+
+    [["lowaa", fill, edge], 17,  5, 9],
+    [["lowaa", fill, edge], 17,  13,  5],
+    [["lowaa", fill, edge],  13, 18,  5],
+    [["lowaa", fill, edge], 18, 10,  5],
+
+    [["lowaa", fill, edge], 18,  6, 10],
+    [["lowaa", fill, edge], 18,  14,  6],
+    [["lowaa", fill, edge],  14, 19,  6],
+    [["lowaa", fill, edge], 19, 11,  6],
+
+    [["lowaa", fill, edge], 19,  7, 11],
+    [["lowaa", fill, edge], 19,  15,  7],
+    [["lowaa", fill, edge],  15, 20,  7],
+    [["lowaa", fill, edge], 20, 12,  7],
+
+    [["lowaa", fill, edge], 20,  8, 12],
+    [["lowaa", fill, edge], 20,  16,  8],
+    [["lowaa", fill, edge],  16, 17,  8],
+    [["lowaa", fill, edge], 17, 9,  8]];
+})();
+
+
+var pspec_pacman = (function () {
+  var edge="#ff0f";
+  var p=0.4142;
+  var vertices = [
+        [-p, -p, 1], // 0
+        [-p, p, 1],  // 1
+        [p, p, 1],   // 2
+        [p, -p, 1],  // 3
+     [-p, -1, p],  // 4
+     [-1, -p, p],  // 5
+     [-1, p, p],   // 6
+     [-p, 1, p],   // 7
+       [p, 1, p], // 8
+       [1, p, p], // 9
+       [1, -p, p], // 10
+       [p, -1, p], // 11
+     [-p, -p, 0], // 12
+     [-p, p, 0], // 13
+     [p, p, 0], // 14
+     [p, -p, 0]]; // 15
+  return ["pacman", vertices,
+  [["top", "#770f", edge], 0, 1, 2, 3],
+
+  [["l1", "#770f", edge], 4, 5, 0],
+  [["l1", "#770f", edge], 5, 6, 1, 0],
+  [["l1", "#770f", edge], 6, 7, 1],
+  [["l1", "#770f", edge], 7, 8, 2, 1],
+  [["l1", "#770f", edge], 8, 9, 2],
+  [["l1", "#770f", edge], 9, 10, 3, 2],
+  [["l1", "#770f", edge], 10, 11, 3],
+  [["l1", "#770f", edge], 11, 4, 0, 3],
+
+  [["l1", "#770f", edge], 5, 4, 12],
+  [["l1", "#770f", edge], 6, 5, 12, 13],
+  [["l1", "#770f", edge], 7, 6, 13],
+  [["l1", "#770f", edge], 8, 7, 13, 14],
+  [["l1", "#770f", edge], 9, 8, 14],
+  [["l1", "#770f", edge], 10, 9, 14, 15],
+  [["l1", "#770f", edge], 11, 10, 15],
+  [["l1", "#770f", edge], 4, 11, 15, 12],
+
+  [["top", "#770f", edge], 15, 14, 13, 12]];
+})();
+
+
+
+/***************************************
+  Face_object construction
+    { label:    "",          Name of this face
+      colorFill:{r=0,g=128,b=255,a=1}    Inner fill color
+      colorEdge:{r=0,g=128,b=255,a=1}    Border color
+      colorEdgeStr:{r,g,b,a}    Border color
+      indices:  [5,0,2,...], Indices to an array of vertices that define one of the model's face
+      visible: true          Other flags...
+    }
+***************************************/
+function colorHashToRGB (str) {
+  var skipHash = str.charAt(0) == "#" ? 1 : 0;
+  r = parseInt(str.charAt(skipHash + 0), 16)*17;
+  g = parseInt(str.charAt(skipHash + 1), 16)*17;
+  b = parseInt(str.charAt(skipHash + 2), 16)*17;
+  a = parseInt(str.charAt(skipHash + 3), 16)/15;
+  if (isNaN(a)) a = 1;
+  return {r:r, g:g, b:b, a:a};
+}
+
+function faceNew (desc, indices) {
+  var colorFill = colorHashToRGB(desc[1]);
+  var colorEdge = colorHashToRGB(desc[2]);
+
+  return {label:     desc[0],
+          colorFill: colorFill,
+          colorEdge: colorEdge,
+          colorEdgeStr: "rgba(" + colorEdge.r + "," + colorEdge.g + "," + colorEdge.b + "," + colorEdge.a + ")",
+          indices:   indices,
+          visible:   true};
+}
+//** TEST **********************************************************************
+(function TESTfaceNew () {
+  var face = faceNew(["testLabel", "#32Fe", "#F200"], [1,2,3]);
+  TESTCmpObj(face.colorFill, {r:51,  g:34, b:255, a:0.933333});
+  TESTCmpObj(face.colorEdge, {r:255, g:34, b:0,   a:0});
+  console.log(face.colorFill);
+  console.log(face.colorEdge);
+  console.log("PASS TESTfaceNew");
+})();
+//******************************************************************************
+
+
+
+
+/***************************************
+  Group_object Create a 3d object (convex enclosure of convex faces) for transforming
+  a model:
+
+    [ "name",
+      [[vertex],...]
+      [[label, colorFill, colorEdge], index,...]
+      ...
+    ]
+
+  => into a group:
+
+    {label:        "object name",
+     verticesBase: [vertex,..., midPoint], Original vertices
+     transformBase:[4x4 matrix],           Base transform for base vertices
+     faces:        [FaceObject,...],
+     skip:         false,
+     invisible:    false,
+     transform:    [4x4 matrix],           Mutable transformation matrix
+     vertices:     [vertex,...],           Mutable vertices
+     vertexCenter: [vertex]}               Array containing the center vertex
+
+ The last vertex represents the mid vector of all points.  It's used for sorting
+ during rendering.
+***************************************/
+function groupInitialize (pspec) {
+  var newGroup=[];
+  var vertices, face, desc;
+  var count=0, x=0, y=0, z=0; // Used to find the center pointer of object
+
+  newGroup.label = pspec[0];
+  newGroup.verticesBase = vertices = copyAryAry(pspec[1]);
+  newGroup.vertices = [];
+  newGroup.vertexCenter = []; // Array of
+  newGroup.transformBase = false;
+  newGroup.faces = [];
+  newGroup.skip = false;
+  newGroup.invisible = false;
+
+  for (var f=0; f<pspec.length-2; ++f) {
+    face = pspec[f+2]; // +2 to skip over the "name" and vertices
+    // Pass desc and indices separately
+    desc = face[0];
+    face = face.slice(1);
+    newGroup.faces[f] = faceNew(desc, face);
+  }
+
+  // Average each x, y and z points to determine center of all points
+  for (var v=0; v<vertices.length; ++v) {
+    var pts = vertices[v];
+    x += pts[0];
+    y += pts[1];
+    z += pts[2];
+    ++count;
+  }
+
+  // Add center point to vertices
+  newGroup.verticesBase.push([x/count, y/count, z/count]);
+
+  return newGroup;
+}
+//** TEST **********************************************************************
+(function TESTgroupInitialize () {
+  var group = groupInitialize(pspec_simple);
+  TESTCmpAry(group.verticesBase[0], [-1,0,0]);
+  TESTCmpAry(group.verticesBase[1], [1,0,0]);
+  TESTCmpAry(group.verticesBase[2], [0,1,0]);
+  TESTCmpAry(group.verticesBase[3], [0, 0.333333,0]);
+  TESTCmpAry(group.faces[0].indices, [0, 1, 2]);
+  TESTCmp(group.verticesBase.length, 4);
+
+  console.log("PASS TESTgroupInitialize");
+})();
+//******************************************************************************
+
+
+/* Copies group's verticesBase to vertices for transforming
+*/
+function groupLoadVerticesBase (group) {
+   for (var i=0; i<group.verticesBase.length; ++i) {
+     group.vertices[i] = group.verticesBase[i].slice(0); // Replace each vector with a new one
+   }
+}
+//** TEST **********************************************************************
+(function TESTgroupLoadVerticesOriginal () {
+  var g = groupInitialize(pspec_simple);
+  // Perform the load
+  groupLoadVerticesBase(g);
+  // Modify copied verticies
+  g.vertices[0][1]=8;
+  g.vertices[0][2]=9;
+  g.vertices[3][0]=7;
+  g.vertices[3][2]=6;
+  // Verify points
+  TESTCmp(g.verticesBase.length, 4);
+  TESTCmp(g.vertices.length, 4);
+  TESTCmpAryAry(g.verticesBase, [[-1,0,0],[1,0,0],[0,1,0],[0, 0.333333,0]]);
+  TESTCmpAryAry(g.vertices,         [[-1,8,9],[1,0,0],[0,1,0],[7, 0.333333,6]]);
+  console.log("PASS TESTfaceLoadVerticesOriginal");
+})();
+//******************************************************************************
+
+function distLocLoc(loc, locb) {
+  return Math.sqrt(square(loc.x - locb.x) +
+                   square(loc.y - locb.y) +
+                   square(loc.z - locb.z));
+}
+function distLocVertex(loc, vertex) {
+  return Math.sqrt(square(2*loc.x - vertex[0]) +
+                   square(2*loc.y - vertex[1]) +
+                   square(2*loc.z - vertex[2]));
+}
+
+
+/***************************************
+  Vertex_transforms
+  Copy and transform matrices and lists of vectors
+***************************************/
+function groupTransformMatVerticesOriginal (mat, group) {
+  groupLoadVerticesBase(group);
+  matMultMatVecs(mat, group.vertices);
+}
+
+function groupTransformMatVertexCenter (mat, group) {
+  group.vertexCenter[0] = group.verticesBase[group.verticesBase.length-1].slice(0);
+  matMultMatVecs(mat, group.vertexCenter);
+}
+
+function setLocationXY (vectors, x, y) {
+  var center = vectors[vectors.length-1];
+  var dx = x - center[0];
+  var dy = y - center[1];
+  var v;
+  for (i=0; i<vectors.length; ++i) {
+    v = vectors[i]; // Consider vector
+    v[0] += dx;
+    v[1] += dy;
+  }
+}
+
+
+/*
+  Direct transformations on list of vertices
+  Shear:
+*/
+function shearXY (vectors, x, y) {
+  for (i=0; i<vectors.length; ++i) {
+    var v = vectors[i]; // Consider vector
+    var z = v[2];
+    v[0] = v[0] + z*x;
+    v[1] = v[1] + z*y;
+  }
+}
+
+/*
+    3 multiplies
+    0 additions
+    3 reads
+    3 writes
+*/
+function scale (vectors, a, b, c) {
+  for (i=0; i<vectors.length; ++i) { // Over every vector
+   var v = vectors[i]; // Consider vector
+    v[0] *= a;
+    v[1] *= b;
+    v[2] *= c;
+  }
+}
+
+/*
+    0 multiplies
+    3 additions
+    3 reads
+    3 writes
+*/
+function translate (vectors, x, y, z) {
+  for (i=0; i<vectors.length; ++i) {
+    var v = vectors[i]; // Consider vector
+    v[0] += x;
+    v[1] += y;
+    v[2] += z;
+  }
+}
+
+function translateY (vectors, y) {
+  for (i=0; i<vectors.length; ++i) vectors[i][1] += y;
+}
+
+/*
+    4 multiplies
+    2 additions
+    2 reads
+    2 writes
+*/
+function rotateX (vectors, angle) {
+  for (i=0; i<vectors.length; ++i) { // Over every vector
+    var v = vectors[i]; // Consider vector
+    var y = v[1];
+    var z = v[2];
+    v[1] = y*cos(angle) - z*sin(angle); // Mutate x
+    v[2] = z*cos(angle) + y*sin(angle); // Mutate y
+  }
+}
+
+
+function rotateY (vectors, angle) {
+  for (i=0; i<vectors.length; ++i) { // Over every vector
+   var v = vectors[i]; // Consider vector
+   var x = v[0];
+   var z = v[2];
+    v[0] = x*cos(angle) - z*sin(angle); // Mutate x
+    v[2] = z*cos(angle) + x*sin(angle); // Mutate y
+  }
+}
+
+function rotateZ (vectors, angle) {
+  for (i=0; i<vectors.length; ++i) { // Over every vector
+   var v = vectors[i]; // Consider vector
+   var x = v[0];
+   var y = v[1];
+    v[0] = x*cos(angle) - y*sin(angle); // Mutate x
+    v[1] = y*cos(angle) + x*sin(angle); // Mutate y
+  }
+}
+
+function perspective (vectors, per) {
+  var skip=false;
+  for (i=0; i<vectors.length; ++i) { // Over every vector
+   var v = vectors[i]; // Consider vector
+   var x = v[0];
+   var y = v[1];
+   var z = v[2];
+   var p = per / y;
+   v[0] = x * p;
+   v[2] = z * p;
+   if (y < 0 ) skip = true;
+  }
+  return skip;
+}
+
+
+/* Transform all the original vertices for each face in the group.
+*/
+function scaleGroupVerticesOriginal (group, x, y, z) {
+  scale(group.verticesBase, x, y, z);
+  return group;
+}
+//** TEST **********************************************************************
+(function TESTscaleGroupVerticesOriginal () {
+  var g = groupInitialize(pspec_simple);
+  // Perform the scale transformation
+  scaleGroupVerticesOriginal(g, 2, 2, 2);
+  // Verify points
+  TESTCmp(g.verticesBase.length, 4);
+  TESTCmpAryAry(g.verticesBase, [[-2,0,0],[2,0,0],[0,2,0],[0, 0.666667,0]]);
+  console.log("PASS TESTscaleGroupVerticesOriginal ");
+})();
+//******************************************************************************
+
+
+
+function setLocationXYGroupVerticesOriginal (group, x, y) {
+  var vertices = group.verticesBase;
+  setLocationXY(vertices, x, y);
+  return group;
+}
+
+function translateGroupVerticesOriginal (group, x, y, z) {
+  translate(group.verticesBase, x, y, z);
+  return group;
+}
+//** TEST **********************************************************************
+(function TESTgroupCopyFromTransform () {
+  // Create and transform original vertices
+  var g = translateGroupVerticesOriginal(groupInitialize(pspec_simple), 100, 100, 100);
+  groupLoadVerticesBase(g);
+  // Translate mutable vertices
+  translate(g.vertices, -10, -10, -10);
+  // Verify points
+  TESTCmp(g.verticesBase.length, 4);
+  TESTCmpAryAry(g.verticesBase, [[99,100,100],[101,100,100],[100,101,100],[100,100.333333,100]]);
+  TESTCmpAryAry(g.vertices,         [[89, 90,90],  [91, 90, 90], [90, 91, 90], [90, 90.333333, 90]]);
+  console.log("PASS TESTgroupCopyFromTransform ");
+})();
+//******************************************************************************
+
+
+
+/* Compute the normal vector of the plane defined by three points
+   if Index 1 is positive, then the plan is oriented towards the viewer
+*/
+function getNormal (v0, v1, v2) {
+  var va = [v1[0]-v0[0], v1[1]-v0[1], v1[2]-v0[2]];
+  var vb = [v2[0]-v0[0], v2[1]-v0[1], v2[2]-v0[2]];
+  return [(va[1] * vb[2]) - (va[2] * vb[1]),
+          (va[0] * vb[2]) - (va[2] * vb[0]),
+          (va[0] * vb[1]) - (va[1] * vb[0])];
+}
+
+
+
+/***************************************
+  Matrix_library
+***************************************/
+function matNewIdent () {
+  return copyAryAry(
+         [[1, 0, 0, 0],
+          [0, 1, 0, 0],
+          [0, 0, 1, 0],
+          [0, 0, 0, 1]]);
+}
+
+function matNewRotZ (a) {
+  var cosa = cos(a);
+  var sina = sin(a);
+  return [[cosa, -sina, 0, 0],
+          [sina,  cosa, 0, 0],
+          [   0,     0, 1, 0],
+          [   0,     0, 0, 1]];
+}
+
+function matNewTranslate (x, y, z) {
+  return copyAryAry(
+         [[1, 0, 0, x],
+          [0, 1, 0, y],
+          [0, 0, 1, z],
+          [0, 0, 0, 1]]);
+}
+
+/*
+   Mutate a transformation matrix with a post translation.
+
+   12 multiplies
+    0 additions
+   12 reads
+   12 writes
+
+   abcd   x000   ax by cz d 
+   efgh * 0y00 = ex fy gz h
+   ijkl   00z0   ix jy kz l
+   mnop   0001   mx ny oz p
+*/
+function matAddScale (mat, x, y, z) {
+  var i;
+  for (i=0; i<4; ++i) {
+    row=mat[i];
+    row[0]*=x; row[1]*=y; row[2]*=z;
+  }
+}
+
+/*
+   Mutate a transformation matrix with a post translation.
+
+   12 multiplies
+   12 additions
+   16 reads
+    4 writes
+
+   abcd   100x   a  b  c   ax+by+cz+d
+   efgh * 010y = e  f  g   ex+fy+gz+h
+   ijkl   001z   i  j  k   ix+jy+kz+l
+   mnop   0001   m  n  o   mx+ny+oz+p
+*/
+function matAddTranslate (mat, x, y, z) {
+  var i;
+  for (i=0; i<4; ++i) {
+    row=mat[i];
+    row[3] +=  row[0]*x + row[1]*y + row[2]*z;
+  }
+}
+
+/*
+   Mutate a transformation matrix with a pre translation.
+
+   12 multiplies
+   12 additions
+   12 reads
+   12 writes
+
+   100x   abcd   a+xm  b+xn  c+xo  d+xp
+   010y * efgh = e+ym  f+yn  g+yo  h+yp
+   001z   ijkl   i+zm  j+zn  k+zo  l+zp
+   0001   mnop   m     n     o     p
+*/
+function matAddTranslateR (x, y, z, mat) {
+  var i, row, m, n, o, p;
+  row = mat[3];
+  m=row[0];  n=row[1];  o=row[2];  p=row[3];
+
+  row = mat[0];
+  row[0]+=x*m;  row[1]+=x*n;  row[2]+=x*o;  row[3]+=x*p;
+
+  row = mat[1];
+  row[0]+=y*m;  row[1]+=y*n;  row[2]+=y*o;  row[3]+=y*p;
+
+  row = mat[2];
+  row[0]+=z*m;  row[1]+=z*n;  row[2]+=z*o;  row[3]+=z*p;
+}
+
+/*
+   Mutate a transformation matrix with a post rotation about the Z axis
+
+   16 multiplies
+    8 additions
+    8 reads
+    8 writes
+
+   x=cos(ang)  y=-sin(ang) z=sin(ang)
+
+   abcd   xy00   ax+bz  ay+bx c d
+   efgh * zx00 = ex+fz  ey+fx g h
+   ijkl   0010   ix+jz  iy+jx k l
+   mnop   0001   mx+nz  my+nx o p
+*/
+function matAddRotZ (mat, ang) {
+  var i, a, b;
+  var cosa = cos(ang);
+  var sina = sin(ang);
+
+  for (i=0; i<4; ++i) {
+    row=mat[i];  a=row[0];  b=row[1];
+    row[0] =  cosa*a + sina*b;
+    row[1] = -sina*a + cosa*b;
+  }
+}
+
+/*
+   Mutate a transformation matrix with a pre rotation about the Z axis
+
+   16 multiplies
+    8 additions
+    8 reads
+    8 writes
+
+   x=cos(ang)  y=-sin(ang) z=sin(ang)
+
+   xy00   abcd   xa+ye  xb+yf  xc+yg  xd+yh
+   zx00 * efgh = za+xe  zb+xf  zc+xg  zd+xh
+   0010   ijkl       i      j      k      l
+   0001   mnop       m      n      o      p
+*/
+function matAddRotZR (ang, mat) {
+  var row0, row1, a, b, c, d, e, f, g, h;
+  var cosa = cos(ang);
+  var sina = sin(ang);
+  row0 = mat[0];
+  row1 = mat[1];
+
+  a=row0[0];  b=row0[1];  c=row0[2];  d=row0[3];
+  e=row1[0];  f=row1[1];  g=row1[2];  h=row1[3];
+
+  row0[0] = cosa*a + -sina*e;
+  row0[1] = cosa*b + -sina*f;
+  row0[2] = cosa*c + -sina*g;
+  row0[3] = cosa*d + -sina*h;
+
+  row1[0] = sina*a + cosa*e;
+  row1[1] = sina*b + cosa*f;
+  row1[2] = sina*c + cosa*g;
+  row1[3] = sina*d + cosa*h;
+}
+
+/*
+   Mutate a transformation matrix with a post rotation about the Y axis
+
+   16 multiplies
+    8 additions
+    8 reads
+    8 writes
+
+   x=cos(ang)  y=-sin(ang) z=sin(ang)
+
+   abcd   x0y0   ax+cz  b  ay+cx  d
+   efgh * 0100 = ex+gz  f  ey+gx  h
+   ijkl   z0x0   ix+kz  j  iy+kx  l
+   mnop   0001   mx+oz  n  my+ox  p
+*/
+function matAddRotY (mat, ang) {
+  var i, a, b;
+  var cosa = cos(ang);
+  var sina = sin(ang);
+
+  for (i=0; i<4; ++i) {
+    row=mat[i];  a=row[0];  c=row[2];
+    row[0] = cosa*a + sina*c;  row[2] = -sina*a + cosa*c;
+  }
+}
+
+/*
+   Mutate a transformation matrix with a post rotation about the X axis
+
+   16 multiplies
+    8 additions
+    8 reads
+    8 writes
+
+   x=cos(ang)  y=-sin(ang) z=sin(ang)
+
+   abcd   1000   a  bx+cz  by+cx  d
+   efgh * 0xy0 = e  fx+gz  fy+gx  h
+   ijkl   0zx0   i  jx+kz  jy+kx  l
+   mnop   0001   m  ox+oz  ny+ox  p
+*/
+function matAddRotX (mat, ang) {
+  var i, a, b;
+  var cosa = cos(ang);
+  var sina = sin(ang);
+
+  for (i=0; i<4; ++i) {
+    row=mat[i];  a=row[1];  b=row[2];
+    row[1] =  cosa*a + sina*b;
+    row[2] = -sina*a + cosa*b;
+  }
+}
+
+
+function matAddPerspective (mat, per) {
+/*
+  abcd            [x   [(x*per)/y
+  efgh *   ?   *   y    y
+  ijkl             z    (z*per)/y
+  mnop             1]   ?]
+*/
+  for (i=0; i<vectors.length; ++i) { // Over every vector
+    var v = vectors[i]; // Consider vector
+    var x = v[0];
+    var y = v[1];
+    var z = v[2];
+    var p = per / y;
+    v[0] = x * p;
+    v[2] = z * p;
+  }
+}
+
+/*
+  Pre-multiply mutate a column-major matrix of vectors by a row-major transformation matrix 
+
+   N*16     multiplies 
+   N*12     additions
+   N*4 + 16 reads
+   N*4      writes
+
+ [[a b c d]     [[x         [[ax+by+cz+dw
+  [e f g h]   *   y  ...  =   ex+fy+gz+hw  ...
+  [i j k l]       z           ix+jy+kz+lw
+  [m n o p]]      w]    ]     mx+ny+oz+pw]     ]
+
+  row-major    column-major
+*/
+function matMultMatVecs (mat, vecs) {
+  var mat0=mat[0], mat1=mat[1], mat2=mat[2], mat3=mat[3];
+  var a=mat0[0], b=mat0[1], c=mat0[2], d=mat0[3];
+  var e=mat1[0], f=mat1[1], g=mat1[2], h=mat1[3];
+  var i=mat2[0], j=mat2[1], k=mat2[2], l=mat2[3];
+  var m=mat3[0], n=mat3[1], o=mat3[2], p=mat3[3];
+
+  var i, vec, x, y, z, w, ww, normalized;
+
+  for (ii=0; ii<vecs.length; ++ii) {
+     normalized=true;
+     // Consider a vector in the list
+     vec = vecs[ii];
+     x = vec[0];
+     y = vec[1];
+     z = vec[2];
+     w = vec[3];
+     if (undefined == w) { normalized=false;  w=1; }
+
+     ww       = x*m + y*n + z*o + w*p;
+     vec[0]   = (x*a + y*b + z*c + w*d)/ww;
+     vec[1]   = (x*e + y*f + z*g + w*h)/ww;
+     vec[2]   = (x*i + y*j + z*k + w*l)/ww;
+     if (normalized) {
+       vec[3] = 1;
+     }
+  }
+}
+
+/*
+             [[a b c d]    [[A B C D]
+ y = x * y =  [e f g h]  *   E F G H]
+              [i j k l]      I J K L]
+              [m n o p]]     M N O P]]
+*/
+function matMultMatMat (x, y) {
+  var row;
+
+  row = x[0]; var a=row[0], b=row[1], c=row[2], d=row[3];
+  row = x[1]; var e=row[0], f=row[1], g=row[2], h=row[3];
+  row = x[2]; var i=row[0], j=row[1], k=row[2], l=row[3];
+  row = x[3]; var m=row[0], n=row[1], o=row[2], p=row[3];
+
+  row = y[0]; var A=row[0], B=row[1], C=row[2], D=row[3];
+  row = y[1]; var E=row[0], F=row[1], G=row[2], H=row[3];
+  row = y[2]; var I=row[0], J=row[1], K=row[2], L=row[3];
+  row = y[3]; var M=row[0], N=row[1], O=row[2], P=row[3];
+
+  row = y[0];
+  row[0] = a*A + b*E + c*I + d*M;
+  row[1] = a*B + b*F + c*J + d*N;
+  row[2] = a*C + b*G + c*K + d*O;
+  row[3] = a*D + b*H + c*L + d*P;
+
+  row = y[1];
+  row[0] = e*A + f*E + g*I + h*M;
+  row[1] = e*B + f*F + g*J + h*N;
+  row[2] = e*C + f*G + g*K + h*O;
+  row[3] = e*D + f*H + g*L + h*P;
+
+  row = y[2];
+  row[0] = i*A + j*E + k*I + l*M;
+  row[1] = i*B + j*F + k*J + l*N;
+  row[2] = i*C + j*G + k*K + l*O;
+  row[3] = i*D + j*H + k*L + l*P;
+
+  row = y[3];
+  row[0] = m*A + n*E + o*I + p*M;
+  row[1] = m*B + n*F + o*J + p*N;
+  row[2] = m*C + n*G + o*K + p*O;
+  row[3] = m*D + n*H + o*L + p*P;
+}
+/*** TEST **********************************************************************
+  Multiply identiy matrix a with b, mutating b.
+*/
+(function TESTmatMultMatMat () {
+  var a = 
+   [[1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1]];
+  var b = 
+   [[1, 2, 3, 4],
+    [5, 6, 7, 8],
+    [9, 10, 11, 12],
+    [13, 14, 15, 16]];
+
+  matMultMatMat(a,b);
+
+  TESTCmpAryAry(b,
+   [[1, 2, 3, 4],
+    [5, 6, 7, 8],
+    [9, 10, 11, 12],
+    [13, 14, 15, 16]]);
+  console.log("PASS TESTmatMultMatMat");
+
+})();
+//******************************************************************************
+
+function matMultMatMatLeft (x, y) {
+  var row;
+
+  row = x[0]; var a=row[0], b=row[1], c=row[2], d=row[3];
+  row = x[1]; var e=row[0], f=row[1], g=row[2], h=row[3];
+  row = x[2]; var i=row[0], j=row[1], k=row[2], l=row[3];
+  row = x[3]; var m=row[0], n=row[1], o=row[2], p=row[3];
+
+  row = y[0]; var A=row[0], B=row[1], C=row[2], D=row[3];
+  row = y[1]; var E=row[0], F=row[1], G=row[2], H=row[3];
+  row = y[2]; var I=row[0], J=row[1], K=row[2], L=row[3];
+  row = y[3]; var M=row[0], N=row[1], O=row[2], P=row[3];
+
+  row = x[0];
+  row[0] = a*A + b*E + c*I + d*M;
+  row[1] = a*B + b*F + c*J + d*N;
+  row[2] = a*C + b*G + c*K + d*O;
+  row[3] = a*D + b*H + c*L + d*P;
+
+  row = x[1];
+  row[0] = e*A + f*E + g*I + h*M;
+  row[1] = e*B + f*F + g*J + h*N;
+  row[2] = e*C + f*G + g*K + h*O;
+  row[3] = e*D + f*H + g*L + h*P;
+
+  row = x[2];
+  row[0] = i*A + j*E + k*I + l*M;
+  row[1] = i*B + j*F + k*J + l*N;
+  row[2] = i*C + j*G + k*K + l*O;
+  row[3] = i*D + j*H + k*L + l*P;
+
+  row = x[3];
+  row[0] = m*A + n*E + o*I + p*M;
+  row[1] = m*B + n*F + o*J + p*N;
+  row[2] = m*C + n*G + o*K + p*O;
+  row[3] = m*D + n*H + o*L + p*P;
+}
+/*** TEST **********************************************************************
+  Multiply identiy matrix a with b, mutating b.
+*/
+(function TESTmatMultMatMatLeft () {
+  var a = 
+   [[1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1]];
+  var b = 
+   [[1, 2, 3, 4],
+    [5, 6, 7, 8],
+    [9, 10, 11, 12],
+    [13, 14, 15, 16]];
+
+  matMultMatMatLeft(a,b);
+  TESTCmpAryAry(a,
+   [[1, 2, 3, 4],
+    [5, 6, 7, 8],
+    [9, 10, 11, 12],
+    [13, 14, 15, 16]]);
+  console.log("PASS TESTmatMultMatMatLeft");
+
+})();
+//******************************************************************************
+
+
+function matMultMatVecsTrans (vecs, mat) {
+/* Matrix multiplication.  Only works if mat is composed of transposed transforms
+  vecs column-major mat row-major
+[[a b c d]    [[x x x x]
+ [x x x x] *   [x x x x]
+ [x x x x]     [x x x x]
+    .          [x x x x]]^T
+    .
+ [x x x x]]
+*/
+  var i, a, b, c, d, rot, normalized;
+  for (i=0; i<vecs.length; ++i) {
+     var vec = vecs[i];
+     normalized=true;
+     // Consider a vector in the list
+     a = vec[0];
+     b = vec[1];
+     c = vec[2];
+     d = vec[3];
+     if (undefined == d) { normalized=false;  d=1; }
+
+     row0 = mat[0];
+     row1 = mat[1];
+     row2 = mat[2];
+     row3 = mat[3];
+
+     vec[0] =                 a*row0[0] + b*row0[1] + c*row0[2] + d*row0[3];
+     vec[1] =                 a*row1[0] + b*row1[1] + c*row1[2] + d*row1[3];
+     vec[2] =                 a*row2[0] + b*row2[1] + c*row2[2] + d*row2[3];
+     if (normalized) vec[0] = a*row3[0] + b*row3[1] + c*row3[2] + d*row3[3];
+  }
+}
+
+//** TEST **********************************************************************
+(function TESTmatMultMatVecs () {
+  var rotMat = matNewRotZ(PI);
+  var points = [[1,0,0,1],[0,1,0,1],[0,0,1,1]];
+
+  console.log(rotMat);
+  matMultMatVecs(rotMat, points);
+  console.log(points);
+
+  TESTCmpAryAry(points, [[-1,0,0,1],[0,-1,0,1],[0,0,1,1]]);
+  console.log("PASS TESTmatMultMatVecs");
+
+})();
+//******************************************************************************
+
+
+
+/***************************************
+  Main
+***************************************/
+window.onload = function () {
+  DB("::WacMan3D");
+  var pcanvas = window.pcanvas;
+  var canvas = document.getElementsByTagName('canvas')[0];
+  var context = canvas.getContext('2d');
+  var width = canvas.width = parseInt(window.getComputedStyle(pcanvas,"").getPropertyValue("width"));
+  var height = canvas.height = parseInt(window.getComputedStyle(pcanvas,"").getPropertyValue("height"));
+  var lscale = 1; // Scale all object coordinates by this
+  var quit = false;
+  var hud = false;
+  var gas = 1;
+  var mouseActive = false;
+  var mouseRotX=0, mouseRotY=0;
+  var elevation = .2;
+  var GhostCount=0;
+  var collision = false;
+  var locPacmanInitial=[];
+  var locGhostsInitial=[];
+  var score=0;
+  var scene = [];
+  var frameRateTime=getTime();
+  var frameCount=0;
+  var frameRate=0;
+
+  context.translate(width/2, height/2); // Set canvas's origin to center
+  function quitToggle () { quit ^= 1; }
+  function hudToggle () { hud ^= 1; }
+  function gasToggle () { gas ^= 1; }
+  function heightAdd (x) { elevation += x;  /*if (elevation < 0) elevation = 0;*/ if (400 < 400) elevation = 400; }
+
+  /* Clear the canvas with all black
+  */
+  function clearContext () {
+    var width = canvas.width;
+    var height = canvas.height;
+    if (collision) {
+      context.fillStyle = "red";
+      context.fillRect(-width/2,-height/2,width, height);
+    } else {
+      // Solid sky
+      context.fillStyle = "#000";
+      context.fillRect(-width/2, -height/2, width, height/2);
+      var offset = 2*1013*pacman.diram/8;
+      // Bitmap sky
+      context.drawImage(stars,  -canvas.width/2 + offset - 2026, -stars.height)
+      context.drawImage(starsr, -canvas.width/2 + offset - 1013, -stars.height)
+      context.drawImage(stars,  -canvas.width/2 + offset       , -stars.height)
+      context.drawImage(starsr, -canvas.width/2 + offset + 1013, -stars.height)
+      // Solid ground
+      context.fillStyle = "#020";
+      context.fillRect(-width/2, 0, width, height);
+    }
+  }
+
+  /* Create all objects that make up scene (the maze) and set their starting positions
+  */
+  for (var y=0; (y < map.length); ++y) {
+    for (var x=0; (x < map[0].length); ++x) {
+      var grp;
+      switch (map[y][x]) {
+        case 1 : { // grass
+          grp = scaleGroupVerticesOriginal(groupInitialize(pspec_grass), 1.0, 1.0, 1.0);
+          grp.transformBase = matNewTranslate(x, y, 0);
+          scene.push(grp);
+          break;
+        }
+        case 2 : { // gravel
+          grp = scaleGroupVerticesOriginal(
+                    groupInitialize([pspec_gravel0, pspec_gravel1, pspec_gravel2][rnd(3)]),
+                  1.0, 1.0, 0.8);
+          grp.transformBase = matNewTranslate(x, y, 0);
+          scene.push(grp);
+          break;
+        }
+        case 5 : { // special case for ghost
+          ++GhostCount;
+          locGhostsInitial.push([x, y, 0.5]);
+          //break;
+        }
+        case 3 : { // road
+          grp = scaleGroupVerticesOriginal(groupInitialize(pspec_road), 1.0, 1.0, 1.0);
+          grp.transformBase = matNewTranslate(x, y, 0);
+          scene.push(grp);
+          break;
+        }
+        case 4 : { // special case for car
+          locPacmanInitial = [x, y, 0.5];
+          break;
+        }
+        case 6 : { // I/O tower
+          scene.push(
+            setLocationXYGroupVerticesOriginal(
+              scaleGroupVerticesOriginal(groupInitialize(pspec_iotower),
+                                         1.0, 1.0, 100.0),
+              lscale*x, lscale*y, 0));
+          break;
+        }
+        case 9 : { // outer wall
+          scene.push(
+            setLocationXYGroupVerticesOriginal(
+              scaleGroupVerticesOriginal(groupInitialize(pspec_wall),
+                                         1.0, 1.0, 5.0),
+              lscale*x, lscale*y, 0));
+          break;
+        }
+      } // switch
+    } // for x
+  } // for y
+
+
+  /* Create the moveable model objects
+  */
+  var pacman = new Entity("pacman", locPacmanInitial, 2);
+
+  var thepacman = scaleGroupVerticesOriginal(groupInitialize(pspec_pacman), .5, .5, .5);
+  thepacman.transformBase = matNewIdent();
+  scene.push(thepacman);
+
+  var ghostGroups=[];
+  var ghostEntities=[];
+  var idx=0;
+
+  while (locGhostsInitial.length) {
+    var gg = scaleGroupVerticesOriginal(groupInitialize(pspec_ghost), 1.0, 1.0, 1.0);
+    var loc = locGhostsInitial.shift();
+    ghostGroups[idx] = gg;
+    rotateZ(gg.verticesBase, PI);
+    scene.push(gg);
+    var ge = new Entity("ghost", loc, 4);
+    ghostEntities[idx] = ge
+    ge.mode = 1;
+    ++idx;
+  }
+
+  /* Zoom/scale is adjustable
+  */
+  var zoom=40.5;
+  function slowZoom (m) {
+    if (.0001 < abs(m)) {
+      if (m < 0) {
+        zoom -= .05;
+        mainRenderLoop();
+        setTimeout(function(){slowZoom(m + .1)}, 1);
+      } else if (0 < m) {
+        zoom += .05;
+        mainRenderLoop();
+        setTimeout(function(){slowZoom(m - .1)}, 1);
+      }
+    }
+  }
+
+  /* Render Loop -- All the animation occurs in this block
+  */
+  function mainRenderLoop () {
+    var clear = 1;
+    var currentTime = getTime();
+    var sortedVisibleScene=[];
+
+    /* Tick pacman
+    */
+    if (gas) { pacman.tick(currentTime); }
+
+    /* Tick ghosts
+    */
+    collision = false;
+
+    for (var i=0; i<GhostCount; ++i) {
+      var gg = ghostGroups[i];
+      var ge = ghostEntities[i];
+      ge.tick(currentTime);
+      gg.transformBase = matNewIdent();
+      matAddTranslate (gg.transformBase, lscale*ge.locam.x, lscale*ge.locam.y, 0);
+      matAddRotZ(gg.transformBase, (ge.diram)/8 * PIx2);
+      // Detect collision between this ghost and pacman
+      collision = collision || (distLocLoc(pacman.locam, ge.locam) < 0.5)
+    }
+
+    // Camera transformations.  In reverse order since-left multiplied Mat*[vercies]
+    var matScene = matNewIdent()
+    matAddRotX(matScene, -mouseRotY);
+    matAddRotZ(matScene, mouseRotX);
+    matAddRotZ(matScene, (pacman.diram+6)/8.0 * -PIx2);
+    matAddTranslate(matScene, -pacman.locam.x*lscale, -pacman.locam.y*lscale, -pacman.locam.z*lscale-elevation);
+
+    /* Create a new transformation matrix for every group in scene based on a copy
+       of the base transformation matrix.  Apply the resulting transform on each
+       object's center vertex to determine potential visibility and keep track of
+       visible in a new array.
+    */
+    for (var g=0; g<scene.length; ++g) {
+      var group = scene[g];
+      var label=group.label;
+      var center;
+
+      // Individual transform to apply to current object
+      var xform=group.transformBase;
+      if (false !== xform) xform = copyAryAry(xform);
+
+      /* Transforms and triggers for dynamic objects
+      */
+      if (label == "pill") {
+        var y=pacman.locfr.y,
+            x=pacman.locfr.x;
+        if (eqpair(pacman.locfr,  pacman.locam) // New tock cycle
+            && mapIsPill(x, y)
+            && x == group.transformBase[0][3]/2
+            && y == group.transformBase[1][3]/2) {
+          map[y][x] = 1.1;
+          doScore(group, 1);
+        }
+        matAddRotZ(xform, currentTime/4000);
+        matAddRotX(xform, currentTime/300);
+      }
+      else if (label == "power") {
+        var y=pacman.locfr.y,
+            x=pacman.locfr.x;
+        if (eqpair(pacman.locfr,  pacman.locam) // New tock cycle
+            && mapWithin(x,y)
+            && map[y][x]==2
+            && x == group.transformBase[0][3]/2
+            && y == group.transformBase[1][3]/2) {
+          map[y][x] = 1.1;
+          doScore(group, 100);
+        }
+        matAddScale(xform, 2+.2*sin(currentTime/200), 2+.2*sin(currentTime/220), 2+.2*sin(currentTime/230));
+      }
+      else if (label == "ghost") {
+        //matAddTranslate (xform, 0, 0, .1+.1*sin(currentTime/200));
+      }
+      else if (label == "pacman") {
+        matAddTranslate (xform, lscale*pacman.locam.x, lscale*pacman.locam.y, 0);
+        matAddRotZ(xform, (pacman.diram)/8 * PIx2);
+      }
+
+      if (xform) {
+        // Combine the individual transform with the camera's transform
+        matMultMatMat(matScene, xform);
+        group.transform = xform;
+      } else {
+        // Static object just gets the camera transform
+        group.transform = matScene;
+      }
+
+      // Transform just the center vertex for now
+      groupTransformMatVertexCenter(group.transform, group);
+
+      // Keep track of the groups groups whos center is in front of camera
+      if (!perspective(group.vertexCenter, 400)) sortedVisibleScene.push(group);
+
+    } // for scene.length
+
+    /* Sort the new group of potentially visible groups
+    */
+    sortedVisibleScene.sort(function (a,b) {return b.vertexCenter[0][1] - a.vertexCenter[0][1];});
+
+    /* Transform and plot each object
+    */
+     for (var g=0; g < sortedVisibleScene.length; ++g) {
+       var group = sortedVisibleScene[g];
+
+       if (group.invisible) continue;
+
+       groupTransformMatVerticesOriginal(group.transform, group);
+
+       if (perspective(group.vertices, 400)) continue;
+
+       // Need to stretch along y-axis so normal calculations are more sane
+       scale(group.vertices, 1, 50, 1);
+
+       for (var f=0; f<group.faces.length; ++f) {
+         var gvertices = group.vertices;
+         var face = group.faces[f];
+         var indices = face.indices;
+         var gv0 = gvertices[indices[0]]; // Consider first three vector for normal calculations
+         var gv1 = gvertices[indices[1]];
+         var gv2 = gvertices[indices[2]];
+         var theNormal = getNormal(gv2, gv1, gv0);
+         var v;
+
+         if (theNormal[1] > 0) {
+           // Begin drawing the initial and next two cached points (x, z)
+           context.beginPath();
+           context.moveTo(gv0[0], -gv0[2]);
+           context.lineTo(gv1[0], -gv1[2]);
+           context.lineTo(gv2[0], -gv2[2]);
+   
+           // Draw the rest of the points
+           for (var i=3; i<indices.length; ++i) {
+             v = gvertices[indices[i]];
+             context.lineTo(v[0], -v[2]);
+           }
+
+           // Render filled area
+           var nx = theNormal[0];
+           var ny = theNormal[1];
+           var nz = theNormal[2];
+           var r = Math.sqrt(nz*nz + ny*ny + nx*nx);
+           // Normalize the normal
+           //nz = nz / r;
+           ny = ny / r;
+           //nx = nx / r;
+
+           var fillStyle = "rgba(" + ((ny * face.colorFill.r) | 0) + "," +
+                                     ((ny * face.colorFill.g) | 0) + "," +
+                                     ((ny * face.colorFill.b) | 0) + "," +
+                                     (face.colorFill.a) + ")";
+
+           // Clear view port before the first polygon is rendered to avoid flickering
+           if (clear) { clearContext();  clear = 0; }
+
+           context.fillStyle = fillStyle;
+           context.fill();
+ 
+           // Outline the faces
+/*
+           context.closePath();
+           context.strokeStyle = face.colorEdgeStr;
+           context.lineWidth = "1";
+           context.stroke();
+*/
+         } // if theNormal > 0
+       } // for faces.group.length
+     } // for sortedVisibleScene.length
+
+    // Frame rate
+    ++frameCount;
+    if (frameRateTime+1000 <= currentTime) {
+      frameRate = 1000*frameCount/(currentTime - frameRateTime);
+      frameRateTime = getTime();
+      frameCount=0;
+    }
+
+    if (hud) {
+      context.fillStyle = "rgba(255,0,0,1)";
+      context.textAlign = "left";
+      context.textBaseline = "top";
+      context.font = "bold 32px Arial";
+      context.fillText("Rate " + frameRate.toFixed(2), -width/2, -height/2+0);
+      //context.fillText("fr   "+pacman.dirfr.toFixed(2) + "(" + pacman.locfr.x.toFixed(2) + " " + pacman.locfr.y.toFixed(2) + ")", -width/2, -height/2+30);
+      //context.fillText("am "+pacman.diram.toFixed(2) + "(" + pacman.locam.x.toFixed(2) + " " + pacman.locam.y.toFixed(2) + ")", -width/2, -height/2+60);
+      //context.fillText("be  "+pacman.dirbe.toFixed(2) + " (" + pacman.locbe.x.toFixed(2) + " " + pacman.locbe.y.toFixed(2) + ")", -width/2, -height/2+90);
+      //context.fillText("go  "+pacman.dirgo,-width/2, -height/2+120);
+    }
+
+    if (!quit) setTimeout(function(){mainRenderLoop()}, 10);
+    else DB ("done.");
+  } // mainRenderLoop()
+
+  var doScore = function (group, pts) {
+    var pill = new Entity("pill", [0, 0, 0], 0);
+    pill.locticker.reset(getTime(), 5000);
+    pill.locbe.z += 5;
+
+    scores.add(score+=pts);
+
+    var pillthread = function () {
+      pill.tick(getTime());
+      lgz = pill.locam.z;
+      //matAddTranslate(group.transformBase, 0, 0, 2);
+      //group.transformBase[2][3] = lgz;
+      matAddScale(group.transformBase, .92, .92, .92);
+      if (pill.locam.z != pill.locbe.z) {
+        setTimeout(function(){pillthread()}, 100);
+      } else {
+        group.invisible = true;
+      }
+    }
+    pillthread();
+  }
+
+  var globalMouse = false;
+  window.onmousedown = function () {
+    globalMouse = event.which;
+/*
+    // Mouse click on screen will move the mouse as well
+    pacman.turnByDelta(
+      event.clientX < width/3   ? 2 :
+      width*2/3 < event.clientX ? 6 : 4);
+*/
+  }
+  window.onmouseup = function () { globalMouse = false; }
+
+  // Rotate scene based on mouse movement event
+  window.mycanvas.onmousemove = function () {
+    if (mouseActive && globalMouse == 1) {
+      var x = event.clientX;
+      var y = event.clientY;
+      mouseRotX = (x-width/2)/99;
+      mouseRotY = (height/2-y)/99;
+    }
+  }
+
+  var flagShift = false;
+
+  var Button_shift = 16;
+  var Button_left = 37;
+  var Button_up = 38;
+  var Button_right = 39;
+  var Button_down = 40;
+  var Button_minus = 189;
+  var Button_equals = 187
+  var Button_h = 'H'.charCodeAt();
+  var Button_i = 'I'.charCodeAt();
+  var Button_j = 'J'.charCodeAt();
+  var Button_k = 'K'.charCodeAt();
+  var Button_l = 'L'.charCodeAt();
+  var Button_q = 'Q'.charCodeAt();
+  var Button_s = 'S'.charCodeAt();
+  var Button_m = 'M'.charCodeAt();
+  var Button_space = ' '.charCodeAt();
+  var Button_bracketOpen = 219;
+  var Button_bracketClose = 221;
+
+  document.body.onkeyup = function () {
+    var b = event.keyCode;
+    switch (b) {
+      case Button_shift : flagShift=false; DB("shift="+flagShift); break;
+    }
+  }
+
+  document.body.onkeydown = function () {
+    var b = event.keyCode;
+    switch (b) {
+      case Button_shift : flagShift=true; break;
+      case Button_i : if (flagShift) { pacman.walkInDirection(0); break; }
+      case Button_up :    pacman.turnByDelta(0); break;
+      case Button_k : if (flagShift) { pacman.walkInDirection(4); break; }
+      case Button_down :  pacman.turnByDelta(4); break;
+      case Button_j : if (flagShift) { pacman.walkInDirection(2); break; }
+      case Button_left:   pacman.turnByDelta(.2); break;
+      case Button_l : if (flagShift) { pacman.walkInDirection(6); break; }
+      case Button_right : pacman.turnByDelta(7.8); break;
+      case Button_h :     hudToggle(); break;
+      case Button_space : gasToggle(); break;
+      case Button_q :     quitToggle(); break;
+      case Button_s :     mainRenderLoop(); break;
+      case Button_equals :  heightAdd(1); break;
+      case Button_minus : heightAdd(-1); break;
+      case Button_bracketOpen : slowZoom(-.1); break;
+      case Button_bracketClose : slowZoom(.1); break;
+      case Button_m : mouseActive = !mouseActive;
+    }
+  }
+
+  mainRenderLoop();
+}
+
+/*
+isNaN
+typeof (blah)
+9..constructor == Number
+*/
+
+</script></html>
