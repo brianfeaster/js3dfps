@@ -1,7 +1,7 @@
 <html>
 <head>
   <style>
-    body, body, canvas, p { background: black; color: #0f0;; padding:0; border:0; margin:0; }
+    body, body, canvas, p { background: black; color: #0f0; padding:0; border:0; margin:0; height=100%; width=100%; }
     .off { display:none; }
   </style>
 </head>
@@ -1594,8 +1594,8 @@ function Main () {
   var canvas = document.getElementsByTagName('canvas')[0];
   var context = canvas.getContext('2d');
   var parentStyle = window.getComputedStyle(canvas.parentElement); // Adjust canvas size to parent's size
-  var width = canvas.width = parseInt(parentStyle.getPropertyValue("width"));
-  var height = canvas.height = parseInt(parentStyle.getPropertyValue("height"));
+  var width = canvas.width = document.body.clientWidth; //parseInt(parentStyle.getPropertyValue("width"));
+  var height = canvas.height = document.body.clientHeight;; //parseInt(parentStyle.getPropertyValue("height"));
   var lscale = 1; // Scale all object coordinates by this
   var quit = false;
   var hud = true;
@@ -2036,17 +2036,18 @@ function Main () {
     pillthread();
   }
 
-  var globalMouse = false;
-  window.onmousedown = function () {
-    globalMouse = event.which;
 /*
+  var globalMouse = false;
+  window.onmousedown = function (event) {
+    globalMouse = event.which;
     // Mouse click on screen will move the mouse as well
     pacman.turnByDelta(
       event.clientX < width/3   ? 2 :
       width*2/3 < event.clientX ? 6 : 4);
-*/
   }
+
   window.onmouseup = function () { globalMouse = false; }
+*/
 
   // Rotate scene based on mouse movement event
   //window.mycanvas.onmousemove = function () {
@@ -2128,7 +2129,7 @@ function Main () {
 
 
 
-  document.body.onkeydown = function () {
+  document.body.onkeydown = function (event) {
     var b = event.keyCode;
     //DB.post("key"+b, "down");
     switch (b) {
@@ -2161,7 +2162,7 @@ function Main () {
     }
   }
 
-  document.body.onkeyup = function () {
+  document.body.onkeyup = function (event) {
     var b = event.keyCode
     //DB.post("key"+b, "up");
     switch (b) {
