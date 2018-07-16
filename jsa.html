@@ -216,18 +216,24 @@ function Body (pf, timeMSInitial) {
   self = function (time) {
     return pf(((time || getTime()) - time0)/1000.0);
   };
+  self.tick = self;
+  self.entity = pf.entity;
   return self;
 }
 
 
-function Trajectory (xyz, dir, gravity, ang, vel) {
+function Trajectory (ent, gravity, ang, vel) {
+  var xyz = ent.locam // Keep track of the starting location and direction of the entity in question..
   var x = xyz.x, y = xyz.y, z = xyz.z;
+  var dir = ent.diram
   var acc = (gravity / -2.0);
   var vh = (vel * cos(PI*ang/180)); // Horizontal
   var vy = vh * cos(dir*PIx2/360.0); // Hor.y
   var vx = vh * sin(dir*PIx2/360.0); // Hor.x
   var vv = (vel * sin(PI*ang/180)); // Vertical
-  return t => ({x: x + vx * t, y: y + vy * t, z: z + acc * t * t + vv * t})
+  var f = (t) => ({x: x + vx * t, y: y + vy * t, z: z + acc * t * t + vv * t})
+  f.entity = ent;
+  return f;
 }
 
 
@@ -402,7 +408,7 @@ function Entity (label, aryam, dir0) {
     this.diram = angle % 360;
     this.locam.x += sin(angle*PIx2/360.0) * amt;
     this.locam.y += cos(angle*PIx2/360.0) * amt;
-    this.locam.z = 0;
+    this.locam.z = 0.5;
   }
   /* Debug stuff.
   */
@@ -537,10 +543,10 @@ var cmap = [
   "                                                                ",
   "                                                                ",
   "                                                                ",
-  "                                                                ",
-  "| |                            p                             | |",
-  " T                            1 1                             T ",
-  "| |                           1s1                            | |"
+  "                               s                                ",
+  "| |                                                          | |",
+  " T                            111                             T ",
+  "| |                           1p1                            | |"
 ].reverse();
 
 var mapHeight = cmap.length;
@@ -1593,7 +1599,8 @@ function Main () {
   var lscale = 1; // Scale all object coordinates by this
   var quit = false;
   var hud = true;
-  var gas = 1; // Literally the gas pedal
+  var gas = [0,0,0,0]; // Literally the gas pedal in the North South East West directions
+  var jumping = 0;
   var mouseActive = false;
   var mouseRotX=0, mouseRotY=0;
   var elevation = .2;
@@ -1608,14 +1615,30 @@ function Main () {
   var ghostEntities=[];
 
   context.translate(width/2, height/2); // Set canvas's origin to center
-  function quitToggle () { quit ^= 1; }
+  function quitToggle () { DB("QUIT"); quit ^= 1; }
   function hudToggle () { hud ^= 1; }
-  function gasToggle () { gas ^= 1; }
+  //function gasToggle () { gas = (0 <= gas) ? -1 : 0; }
+  function gasWalkNorth(v) { gas[0] = v; }
+  function gasWalkSouth(v) { gas[1] = v; }
+  function gasWalkEast(v)  { gas[2] = v; }
+  function gasWalkWest(v)  { gas[3] = v; }
   function heightAdd (x) { elevation += x;  /*if (elevation < 0) elevation = 0;*/ if (400 < 400) elevation = 400; }
   function jump () {
-    gas = 2;
-    cannons.push(Body(Trajectory(pacman.locam, pacman.diram, 4, 70, 10))); // loc dir grav ang vel
+    if (jumping) return;
+    jumping = 1;
+    cannons.push(Body(Trajectory(pacman, 4, 70, 10))); // loc dir grav ang vel
   } // Reset next parameterized shell motion at current time.
+  function fire () {
+        // Create the new bullet at the location of the user's avatar.
+        var g = scaleGroupVerticesOriginal(groupInitialize(pspec_pacman), 0.1, 0.1, 0.1);
+        g.label = "bullet";
+        //DB(pacman.locam.x + " " + pacman.locam.y + " " + pacman.locam.z);
+        g.transformBase = matNewTranslate(pacman.locam.x, pacman.locam.y, pacman.locam.z);
+        scene.push(g);
+        var e = new Entity("bullet", [pacman.locam.x, pacman.locam.y, pacman.locam.z], mouseLookX);
+        e.group = g;
+        cannons.push(Body(Trajectory(e, 2, -mouseLookY, 7))); // loc dir grav ang vel
+  }
 
   /* Clear the canvas with all black
   */
@@ -1676,10 +1699,11 @@ function Main () {
           break;
         }
         case 4 : { // special case for car
-          var thepacman = scaleGroupVerticesOriginal(groupInitialize(pspec_pacman), .5, .5, .5);
-          thepacman.transformBase = matNewIdent();
-          scene.push(thepacman);
+          var g = scaleGroupVerticesOriginal(groupInitialize(pspec_pacman), .5, .5, .5);
+          g.transformBase = matNewIdent();
+          scene.push(g);
           pacman = new Entity("pacman", [x, y, 0.5], 2);
+          pacman.group = g;
           break;
         }
         case 5 : { // special case for ghost
@@ -1758,31 +1782,40 @@ function Main () {
     /* Tick pacman
     */
     //if (gas) { pacman.tick(currentTime); }
-    if (gas) {
-      pacman.tickInDirection(mouseLookX, gas==1 ? 0.1 : 0.0);
-      DB.post("mouse", pacman.diram.toFixed(2) + " " +
-                       pacman.locam.x.toFixed(2) + " " +
-                       pacman.locam.y.toFixed(2) + " " +
-                       pacman.locam.z.toFixed(2));
+    if (gas[0] || gas[1] || gas[2] || gas[3]) {
+      pacman.tickInDirection( mouseLookX + [[315,0,45],[270,0,90],[225,180,135]] [gas[0]-gas[1]+1] [gas[2]-gas[3]+1], 0.1) ; // Was mouseLookX
+      //DB.post("mouse", pacman.diram.toFixed(2) + " " + pacman.locam.x.toFixed(2) + " " + pacman.locam.y.toFixed(2) + " " + pacman.locam.z.toFixed(2));
     }
 
     /* Tick cannons
     */
-    cannons.forEach( body=>{
+    //DB.post("cannons length", cannons.length)
+    cannons.forEach( (body,idx)=>{
       if (null != body) {
-        var loc = body(currentTime);
-        console.log(loc);
-        if (loc.z < 0) {
-          gas = 1;
-          cannons.pop();
-          pacman.locam.x = loc.x;
-          pacman.locam.y = loc.y;
-          pacman.locam.z = 0;
+        var loc = body.tick(currentTime);
+        //DB.post("body", loc.x + " " + loc.y + " " + loc.z);
+        var entity = body.entity;
+        var group = entity.group;
+        //console.log(loc);
+        if (entity.label == "pacman") {
+          if (loc.z < 0.5) {
+            jumping = 0;
+            cannons[idx] = null;
+            entity.locam.x = loc.x;
+            entity.locam.y = loc.y;
+            entity.locam.z = 0.5;
+          } else {
+            entity.locam.x = loc.x;
+            entity.locam.y = loc.y;
+            entity.locam.z = loc.z;
+          }
         } else {
-          //DB.post("cannons", loc.x.toFixed(2) + " " + loc.y.toFixed(2));
-          pacman.locam.x = loc.x;
-          pacman.locam.y = loc.y;
-          pacman.locam.z = loc.z;
+          if (loc.z < 0.0) {
+            group.transformBase = matNewTranslate(loc.x, loc.y, 0.0);
+            cannons[idx] = null;
+           } else {
+            group.transformBase = matNewTranslate(loc.x, loc.y, loc.z);
+          }
         }
       }
     });
@@ -2016,24 +2049,28 @@ function Main () {
   window.onmouseup = function () { globalMouse = false; }
 
   // Rotate scene based on mouse movement event
-  window.mycanvas.onmousemove = function () {
-    if (mouseActive && globalMouse == 1) {
-      var x = event.clientX;
-      var y = event.clientY;
-      mouseRotX = (x-width/2)/99;
-      mouseRotY = (height/2-y)/99;
-    }
-  }
+  //window.mycanvas.onmousemove = function () {
+  //  if (mouseActive && globalMouse == 1) {
+  //    var x = event.clientX;
+  //    var y = event.clientY;
+  //    mouseRotX = (x-width/2)/99;
+  //    mouseRotY = (height/2-y)/99;
+  //  }
+  //}
 
   var flagShift = false;
 
   var Button_shift = 16;
+  var Button_esc = 27;
   var Button_left = 37;
   var Button_up = 38;
   var Button_right = 39;
   var Button_down = 40;
   var Button_minus = 189;
   var Button_equals = 187
+  var Button_a = 'A'.charCodeAt();
+  var Button_d = 'D'.charCodeAt();
+  var Button_f = 'F'.charCodeAt();
   var Button_g = 'G'.charCodeAt();
   var Button_h = 'H'.charCodeAt();
   var Button_i = 'I'.charCodeAt();
@@ -2054,37 +2091,68 @@ function Main () {
     }
   }
 
-  //document.body.onclick = document.body.requestPointerLock
 
-  document.body.onmousemove = (e) => {
-    mye = e;
-    mouseLookX += e.movementX;
 
-    mouseLookY += e.movementY;
-    if (mouseLookY < -90) mouseLookY = -90;
-    if (45 < mouseLookY) mouseLookY = 45;
+  var enterPointerLock = function () {
+    document.body.onmousemove = (e) => {
+      mouseLookX += e.movementX/2;
+      mouseLookY += e.movementY/2;
+      if (mouseLookY < -90) mouseLookY = -90;
+      if (45 < mouseLookY) mouseLookY = 45;
+    }
+    document.body.onclick = function (e) {
+      if (e.button == 0) { fire(); }
+      if (e.button == 2) { jump(); }
+    }
+    //gas = 1; // Start motion
   }
 
-  document.body.onclick = function () { jump(); };
+  var exitPointerLock = function () {
+    document.body.onmousemove = null;
+    document.body.onclick = null;
+    //gas = -1;
+  };
+
+  /* Locked mouse pointer state machine. The exit-pointer-lock state
+     is entered at the start.
+  */
+  ((locked=1) =>
+   document.onpointerlockchange = () => {
+     if (locked ^= 1) {
+       enterPointerLock();
+     } else {
+       exitPointerLock();
+       document.body.onclick = document.body.requestPointerLock;
+     }
+   })()();
+
+
 
   document.body.onkeydown = function () {
     var b = event.keyCode;
-    //DB.post("key", b);
+    //DB.post("key"+b, "down");
     switch (b) {
       case Button_shift : flagShift=true; break;
-      case Button_i : if (flagShift) { pacman.walkInDirection(0); break; }
-      case Button_up :    pacman.turnByDelta(0); break;
-      case Button_k : if (flagShift) { pacman.walkInDirection(4); break; }
-      case Button_down :  pacman.turnByDelta(4); break;
-      case Button_j : if (flagShift) { pacman.walkInDirection(2); break; }
-      case Button_left:   pacman.turnByDelta(.2); break;
-      case Button_l : if (flagShift) { pacman.walkInDirection(6); break; }
-      case Button_right : pacman.turnByDelta(7.8); break;
-      case Button_g :     gasToggle(); break;
+      //case Button_i : if (flagShift) { pacman.walkInDirection(0); break; }
+      //case Button_up :    pacman.turnByDelta(0); break;
+      //case Button_k : if (flagShift) { pacman.walkInDirection(4); break; }
+      //case Button_down :  pacman.turnByDelta(4); break;
+      //case Button_j : if (flagShift) { pacman.walkInDirection(2); break; }
+      //case Button_left:   pacman.turnByDelta(.2); break;
+      //case Button_l : if (flagShift) { pacman.walkInDirection(6); break; }
+      //case Button_right : pacman.turnByDelta(7.8); break;
+      //case Button_g :     gasToggle(); break;
       case Button_h :     hudToggle(); break;
       case Button_space : jump(); break;
       case Button_q :     quitToggle(); break;
-      case Button_s :     turretForward(); break;
+      case Button_down :
+      case Button_a :     gasWalkNorth(1); break;
+      case Button_up:
+      case Button_s :     gasWalkSouth(1); break;
+      case Button_right :
+      case Button_f :     gasWalkEast(1);  break;
+      case Button_left :
+      case Button_d :     gasWalkWest(1); break;
       case Button_equals :  heightAdd(1); break;
       case Button_minus : heightAdd(-1); break;
       case Button_bracketOpen : slowZoom(-100); break;
@@ -2093,9 +2161,23 @@ function Main () {
     }
   }
 
+  document.body.onkeyup = function () {
+    var b = event.keyCode
+    //DB.post("key"+b, "up");
+    switch (b) {
+      case Button_down :
+      case Button_a : gasWalkNorth(0); break;
+      case Button_up :
+      case Button_s : gasWalkSouth(0); break;
+      case Button_right :
+      case Button_f : gasWalkEast(0); break;
+      case Button_left:
+      case Button_d : gasWalkWest(0); break;
+    }
+  } 
+
   mainRenderLoop();
 } // Main
-
 
 window.onload = function () { Main(); }
 
