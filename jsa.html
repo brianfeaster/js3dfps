@@ -8,14 +8,16 @@
 
 <body id="pcanvas">
   <canvas id="mycanvas"></canvas>
-  <p id="DB" style="position:fixed; right:0; bottom:0; width:30em; max-height:20em; background:#0f01; overflow:auto; white-space:pre"></p>
+  <p id="DB" style="color:white; position:fixed; right:0; bottom:0; width:20em; max-height:20em; background:#0f01; overflow:auto; white-space:pre"></p>
 </body><script>
+
 
 
 var stars=document.createElement("img");
 stars.src="stars.jpg";
 var starsr=document.createElement("img");
 starsr.src="starsr.jpg";
+
 
 
 /******************************************************************************
@@ -155,7 +157,8 @@ function TESTCmpAryAry (a, b) {
 /***************************************
   Global_alises_and_functions
 ***************************************/
-var rnd = function(n){return Math.floor(Math.random()*n)}
+var rnd  = function(n){return Math.floor(Math.random()*n);}
+var rndf = function(n){return Math.random()*n;}
 var sin = Math.sin;
 var cos = Math.cos;
 var abs = Math.abs;
@@ -168,8 +171,19 @@ function copyAryAry (a) {
   for (i=0; i<b.length; ++i) b[i] = b[i].slice(0);
   return b;
 }
-var PI=Math.PI;
-var PIx2 = PI*2;
+// 3D land counts in radians....base-360, baby.
+var PI0   = 0.00000000000000000
+var PI1   = 0.017453292519943295
+var PI10 = 0.17453292519943295
+var PI45  = 0.7853981633974483
+var PI80 = 1.3962634015954636
+var PI90  = 1.5707963267948966
+var PI135 = 2.356194490192345
+var PI180 = 3.141592653589793
+var PI225 = 3.9269908169872414
+var PI270 = 4.71238898038469
+var PI315 = 5.497787143782138
+var PI360 = 6.283185307179586
 
 
 
@@ -210,8 +224,10 @@ function Ticker () {
 
 /**************************************************************
  Temporarlly parameterized object interface thingy.
+
+  Usage::
 **************************************************************/
-function Body (pf, timeMSInitial) {
+function Body (pf, timeMSInitial) { // parameterized function
   var time0 = timeMSInitial || getTime();
   self = function (time) {
     return pf(((time || getTime()) - time0)/1000.0);
@@ -224,14 +240,18 @@ function Body (pf, timeMSInitial) {
 
 function Trajectory (ent, gravity, ang, vel) {
   var xyz = ent.locam // Keep track of the starting location and direction of the entity in question..
-  var x = xyz.x, y = xyz.y, z = xyz.z;
-  var dir = ent.diram
+  var x = xyz.x;
+  var y = xyz.y;
+  var z = xyz.z;
+  var dir = ent.diram;
   var acc = (gravity / -2.0);
-  var vh = (vel * cos(PI*ang/180)); // Horizontal
-  var vy = vh * cos(dir*PIx2/360.0); // Hor.y
-  var vx = vh * sin(dir*PIx2/360.0); // Hor.x
-  var vv = (vel * sin(PI*ang/180)); // Vertical
-  var f = (t) => ({x: x + vx * t, y: y + vy * t, z: z + acc * t * t + vv * t})
+  var vh  = (vel * cos(ang)); // Horizontal
+  var vy  = (vh * cos(dir)); // Hor.y
+  var vx  = (vh * sin(dir)); // Hor.x
+  var vv  = (vel * sin(ang)); // Vertical
+  var f = (t) => ({x: x + vx * t,
+                   y: y + vy * t,
+                   z: z + acc * t * t + vv * t})
   f.entity = ent;
   return f;
 }
@@ -240,6 +260,13 @@ function Trajectory (ent, gravity, ang, vel) {
 /***************************************
   Entity_class - Models a position and direction
   with the ability to rotate and walk incrementally.
+
+  Used to represent pacman entities that walk around
+  a maze and rotate around corners.  Timeline: locfr --locam--> locbe
+
+  Entities state:  location, orientation.  as cartesian matrix and either another matrix and/or angles of rotation
+
+  Associated with polygroups
 ***************************************/
 function Entity (label, aryam, dir0) {
   this.label = label;
@@ -275,7 +302,7 @@ function Entity (label, aryam, dir0) {
     //if (dir==4) return {x:loc.x - 1, y:loc.y,     z:loc.z};
     //if (dir==2) return {x:loc.x,     y:loc.y + 1, z:loc.z};
     //if (dir==6) return {x:loc.x,     y:loc.y - 1, z:loc.z};
-    return {x:loc.x + cos(dir/8*PIx2), y:loc.y + sin(dir/8*PIx2), z:loc.z};
+    return {x:loc.x + cos(dir/8*PI360), y:loc.y + sin(dir/8*PI360), z:loc.z};
     return loc;
   }
   /* Return solid/not-solid of the location at locbe in the delta direction
@@ -405,9 +432,9 @@ function Entity (label, aryam, dir0) {
   /* Directly Update current position in a specific direction
   */
   this.tickInDirection = function (angle, amt) {
-    this.diram = angle % 360;
-    this.locam.x += sin(angle*PIx2/360.0) * amt;
-    this.locam.y += cos(angle*PIx2/360.0) * amt;
+    this.diram = angle;
+    this.locam.x += sin(angle) * amt;
+    this.locam.y += cos(angle) * amt;
     this.locam.z = 0.5;
   }
   /* Debug stuff.
@@ -418,7 +445,7 @@ function Entity (label, aryam, dir0) {
                 "am=(" + this.locam.x + " " + this.locam.y + " " + this.locam.z + ")" + "  " +
                 "be=(" + this.locbe.x + " " + this.locbe.y + " " + this.locbe.z + ")");
   }
-}
+} // Entity
 //** TEST **********************************************************************
 (function TESTEntityTick () {
   var ent = new Entity("ent", [1, 2, 3], 0); // Start off at 1,2,3 dir=0
@@ -603,12 +630,12 @@ function pspecGenerateUnitCube (name, fill, edge) {
     //    4           5            6            7
     [-s, -s, 1], [ s, -s, 1], [ s,  s, 1], [-s,  s, 1]];
   return [name, vertices,
-    [["bottom",fill, edge], 0,  1,  2,  3],
-    [["top",   fill, edge], 07,06, 05, 04],
-    [["front", fill, edge], 1,  0, 04, 05],
-    [["left",  fill, edge], 0,  3, 07, 04],
-    [["back",  fill, edge], 3,  2, 06, 07],
-    [["right", fill, edge], 2,  1, 05, 06]];
+    [["bottom","#a00f", "#f00f"], 0,  1,  2,  3],
+    [["top",   "#0a0f", "#0f0f"], 7,  6,  5,  4],
+    [["front", "#00af", "#00ff"], 1,  0,  4,  5],
+    [["left",  "#0aaf", "#0fff"], 0,  3,  7,  4],
+    [["back",  "#aa0f", "#ff0f"], 3,  2,  6,  7],
+    [["right", "#a0af", "#f0ff"], 2,  1,  5,  6]];
 }
 
 function pspecGenerateUnitFloor (name, fill, edge) {
@@ -649,6 +676,7 @@ var pspec_road    = pspecGenerateUnitFloor("road", "#ffff", "#ffff");
 var pspec_wall    = pspecGenerateUnitCube("wall", "#008f", "#000f");
 var pspec_maze    = pspecGenerateUnitCube("maze", "#88f7", "#00ff");
 var pspec_iotower = pspecGenerateUnitPyramid("iotower", "#800f", "#f00f");
+var pspec_iotowerp= pspecGenerateUnitPyramid("iotower", "#809f", "#f0ff");
 var pspec_pill    = pspecGenerateUnitCube("pill", "#fff9", "#ffff");
 var pspec_power   = pspecGenerateUnitCube("power", "#ff08", "#ff0f");
 
@@ -804,8 +832,7 @@ function faceNew (desc, indices) {
           colorFill: colorFill,
           colorEdge: colorEdge,
           colorEdgeStr: "rgba(" + colorEdge.r + "," + colorEdge.g + "," + colorEdge.b + "," + colorEdge.a + ")",
-          indices:   indices,
-          visible:   true};
+          indices:   indices}
 }
 //** TEST **********************************************************************
 (function TESTfaceNew () {
@@ -1147,6 +1174,13 @@ function matNewTranslate (x, y, z) {
           [0, 0, 0, 1]]);
 }
 
+function matNewScale (x, y, z) {
+  return copyAryAry(
+         [[x, 0, 0, 0],
+          [0, y, 0, 0],
+          [0, 0, z, 0],
+          [0, 0, 0, 1]]);
+}
 /*
    Mutate a transformation matrix with a post translation.
 
@@ -1566,7 +1600,7 @@ function matMultMatVecsTrans (vecs, mat) {
 
 //** TEST **********************************************************************
 (function TESTmatMultMatVecs () {
-  var rotMat = matNewRotZ(PI);
+  var rotMat = matNewRotZ(PI180);
   var points = [[1,0,0,1],[0,1,0,1],[0,0,1,1]];
 
   console.log(rotMat);
@@ -1583,8 +1617,11 @@ function matMultMatVecsTrans (vecs, mat) {
 /***************************************
   Globals
 ***************************************/
-var mouseLookX = 0;
-var mouseLookY = 0;
+var last = {};
+var rem = {};
+var mouseLookX = PI0;
+var mouseLookY = PI0;
+
 
 /***************************************
   Main
@@ -1626,8 +1663,9 @@ function Main () {
   function jump () {
     if (jumping) return;
     jumping = 1;
-    cannons.push(Body(Trajectory(pacman, 4, 70, 10))); // loc dir grav ang vel
+    cannons.push(Body(Trajectory(pacman, 15, PI80, 60))); // grav ang vel
   } // Reset next parameterized shell motion at current time.
+
   function fire () {
         // Create the new bullet at the location of the user's avatar.
         var g = scaleGroupVerticesOriginal(groupInitialize(pspec_pacman), 0.1, 0.1, 0.1);
@@ -1637,7 +1675,8 @@ function Main () {
         scene.push(g);
         var e = new Entity("bullet", [pacman.locam.x, pacman.locam.y, pacman.locam.z], mouseLookX);
         e.group = g;
-        cannons.push(Body(Trajectory(e, 2, -mouseLookY, 7))); // loc dir grav ang vel
+        cannons.push(Body(Trajectory(e, 2, PI45, 7))); // WAS -mouseLoookY loc dir grav ang vel
+        socket.send("fire");
   }
 
   /* Clear the canvas with all black
@@ -1686,8 +1725,9 @@ function Main () {
         }
         case 2 : { // gravel
           grp = scaleGroupVerticesOriginal(
-                    groupInitialize([pspec_gravel0, pspec_gravel1, pspec_gravel2][rnd(3)]),
-                  1.0, 1.0, 0.8);
+                  groupInitialize([pspec_gravel0, pspec_gravel1, pspec_gravel2][rnd(3)]), // Choose a random gravel
+                  1.0, 1.0, 0.7);
+          grp.label="gravel";
           grp.transformBase = matNewTranslate(x, y, 0);
           scene.push(grp);
           break;
@@ -1709,7 +1749,7 @@ function Main () {
         case 5 : { // special case for ghost
           var gg = scaleGroupVerticesOriginal(groupInitialize(pspec_ghost), 1.0, 1.0, 1.0);
           ghostGroups.push(gg);
-          rotateZ(gg.verticesBase, PI);
+          rotateZ(gg.verticesBase, PI180);
           scene.push(gg);
           var ge = new Entity("ghost", [x, y, 0.5], 4);
           ghostEntities.push(ge);
@@ -1733,11 +1773,11 @@ function Main () {
           break;
         }
         case 8 : { // inner wall
-          scene.push(
-            setLocationXYGroupVerticesOriginal(
-              scaleGroupVerticesOriginal(groupInitialize(pspec_maze),
-                                         1.0, 1.0, 9.0),
-              lscale*x, lscale*y, 0));
+          var g = setLocationXYGroupVerticesOriginal(
+                    scaleGroupVerticesOriginal(groupInitialize(pspec_maze),
+                                               1.0, 1.0, 9.0),
+                    lscale*x, lscale*y, 0);
+          scene.push(g);
           break;
         }
         case 9 : { // outer wall
@@ -1753,6 +1793,20 @@ function Main () {
   } // for y
 
 
+  /* A perimeter of towers
+  */
+  for (var a=0; a<1000; a+=8) {
+    var m = matNewIdent();
+    //matAddRotZ(m, rndf(PI360));
+    //matAddRotY(m, (Math.pow(2.0,25+rnd(6000)/1000.0)/23000000)*PI1);
+    matAddRotZ(m, a*PI1);
+    matAddRotY(m, a*PI1/90);
+    matAddTranslate(m, 100, 0, 0);
+    g = scaleGroupVerticesOriginal(groupInitialize(pspec_pill), 5.0, 5.0, 5.0),
+    g.label = "dome";
+    g.transformBase = m;
+    scene.push(g);
+  }
 
   /* Zoom/scale is adjustable
   */
@@ -1783,7 +1837,10 @@ function Main () {
     */
     //if (gas) { pacman.tick(currentTime); }
     if (gas[0] || gas[1] || gas[2] || gas[3]) {
-      pacman.tickInDirection( mouseLookX + [[315,0,45],[270,0,90],[225,180,135]] [gas[0]-gas[1]+1] [gas[2]-gas[3]+1], 0.1) ; // Was mouseLookX
+      pacman.tickInDirection(
+        mouseLookX
+         + [[PI315,PI0,PI45],[PI270,PI0,PI90],[PI225,PI180,PI135]][gas[0]-gas[1]+1][gas[2]-gas[3]+1],
+       .1); // magnitude
       //DB.post("mouse", pacman.diram.toFixed(2) + " " + pacman.locam.x.toFixed(2) + " " + pacman.locam.y.toFixed(2) + " " + pacman.locam.z.toFixed(2));
     }
 
@@ -1830,7 +1887,7 @@ function Main () {
       ge.tick(currentTime);
       gg.transformBase = matNewIdent();
       matAddTranslate (gg.transformBase, lscale*ge.locam.x, lscale*ge.locam.y, 0);
-      matAddRotZ(gg.transformBase, (ge.diram)/8 * PIx2);
+      matAddRotZ(gg.transformBase, (ge.diram)/8 * PI360);
       // Detect collision between this ghost and pacman
       collision = collision || (distLocLoc(pacman.locam, ge.locam) < 0.5)
     }
@@ -1839,9 +1896,9 @@ function Main () {
     var matScene = matNewIdent()
     //matAddRotX(matScene, -mouseRotY);
     //matAddRotZ(matScene, mouseRotX);
-    matAddRotX(matScene, mouseLookY *PIx2 / 360.0);
-    matAddRotZ(matScene, mouseLookX *PIx2 / 360.0);
-    //matAddRotZ(matScene, (pacman.diram+6)/8.0 * -PIx2);
+    matAddRotX(matScene, mouseLookY);
+    matAddRotZ(matScene, mouseLookX);
+    //matAddRotZ(matScene, (pacman.diram+6)/8.0 * -PI360);
     matAddTranslate(matScene, -pacman.locam.x*lscale, -pacman.locam.y*lscale, -pacman.locam.z*lscale-elevation);
 
     /* Create a new transformation matrix for every group in scene based on a copy
@@ -1891,11 +1948,27 @@ function Main () {
       }
       else if (label == "pacman") {
         matAddTranslate (xform, lscale*pacman.locam.x, lscale*pacman.locam.y, lscale*pacman.locam.z);
-        matAddRotZ(xform, (pacman.diram)/8 * PIx2);
+        matAddRotZ(xform, (pacman.diram)/8 * PI360);
       }
       else if (label == "turret") {
         //matAddRotY(xform, mouseLookX/100.0);
         //matAddRotX(xform, mouseLookY/100.0);
+        xform = matNewRotZ(rem.d);
+        matAddTranslateR(rem.x/2, rem.y/2, 0, xform);
+      } else if (label == "gravel") {
+          var j = group.transformBase[0][3];
+          var k = group.transformBase[1][3];
+          matAddScale(xform, 1.0, 1.0, 1.0+sin(j/8+k/5+currentTime/1000*PI360));
+      } else if (label == "dome") {
+          matAddRotX(xform, currentTime/10*PI1);
+          matAddRotY(xform, currentTime/10*PI1);
+          matAddRotZR(currentTime/20*PI1, xform);
+      } else if (label == "maze") {
+        var j = group.verticesBase[0][0];
+        xform = matNewScale(1.0, 1.0, 1.0+sin((j/10+currentTime/1000)*PI90));
+      } else if (label == "wall") {
+        var j = group.verticesBase[0][0];
+        xform = matNewScale(1.0, 1.0, 1.0+sin((-j/5+currentTime/1000)*PI90));
       }
 
       if (xform) {
@@ -2009,8 +2082,19 @@ function Main () {
       //context.fillText("go  "+pacman.dirgo,-width/2, -height/2+120);
     }
 
+    // BF: TODO
+    // Update server of my wareabouts.
+    if (socket.readyState && (last.d != mouseLookX || last.x != pacman.locam.x || last.y != pacman.locam.y)) {
+        last.d = mouseLookX;
+        last.x = pacman.locam.x;
+        last.y = pacman.locam.y;
+        socket.send("l 0 " + last.d.toFixed(3) + " " + last.x.toFixed(3) + " " + last.y.toFixed(3));
+        DB(last.d.toFixed(3) + " " + last.x.toFixed(3) + " " + last.y.toFixed(3));
+    }
+
     if (!quit) setTimeout(function(){mainRenderLoop()}, 10);
     else DB ("done.");
+
   } // mainRenderLoop()
 
   var doScore = function (group, pts) {
@@ -2090,17 +2174,29 @@ function Main () {
     switch (b) {
       case Button_shift : flagShift=false; DB("shift="+flagShift); break;
     }
-  }
+  };
 
+  document.body.ontouchmove = function (e) {
+      DB( e.changedTouches[0].pageX);
+      mouseLookX = e.changedTouches[0].pageX * PI1;
+      mouseLookY = e.changedTouches[0].pageY * PI1;
+      if (mouseLookY < -PI45) mouseLookY = -PI45;
+      if (PI45 < mouseLookY) mouseLookY = PI45;
+  };
+
+
+  function mouseControlsLook () {
+    document.body.onmousemove = (e) => {
+      mouseLookX += e.movementX * PI1;
+      mouseLookY += e.movementY * PI1;
+      if (mouseLookY < -PI45) mouseLookY = -PI45;
+      if (PI45 < mouseLookY) mouseLookY = PI45;
+    }
+  };
 
 
   var enterPointerLock = function () {
-    document.body.onmousemove = (e) => {
-      mouseLookX += e.movementX/2;
-      mouseLookY += e.movementY/2;
-      if (mouseLookY < -90) mouseLookY = -90;
-      if (45 < mouseLookY) mouseLookY = 45;
-    }
+    mouseControlsLook();
     document.body.onclick = function (e) {
       if (e.button == 0) { fire(); }
       if (e.button == 2) { jump(); }
@@ -2127,6 +2223,7 @@ function Main () {
      }
    })()();
 
+  setTimeout( mouseControlsLook, 1000);
 
 
   document.body.onkeydown = function (event) {
@@ -2180,7 +2277,27 @@ function Main () {
   mainRenderLoop();
 } // Main
 
+
+
 window.onload = function () { Main(); }
+var socket = new WebSocket('ws://world.dv8.org:7199')
+
+socket.onopen = function (event) {
+  DB("websocket connected.");
+  //socket.send("\000\000\000\000");
+}
+
+socket.onclose = function (event) {
+  DB("websocket closed.");
+}
+
+socket.onmessage = function (event) {
+  var msg = event.data.split(' ');
+  DB("websocket receive:" + event.data);
+  rem.d = parseFloat(msg[0]);
+  rem.x = parseFloat(msg[1]);
+  rem.y = parseFloat(msg[2]);
+}
 
 
 /*
@@ -2203,4 +2320,10 @@ typeof (blah)
   Vertex_transforms
   Matrix_library
   Main
+
+  TODO:
+   Concave Polygon
+   {name:"cube",
+    vertices:[[x,y,z],...],
+    faces:[
 -->
