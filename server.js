@@ -56,13 +56,13 @@ function receiveConnection (s) { // socket
 ////////////////////////////////////////////////////////////////////////////////
 // Agent
 ////////////////////////////////////////////////////////////////////////////////
-var buffers = Buffer.concat([]);
+var buffers = new Buffer(0);
 var httpHeaders = {};
 
-function receiveBuffer (id, s, b) { // number socket buffer
+function receiveBuffer (id, s, b) { // number socket Buffer
   //DB("\x1b[33m" + JSON.stringify(b.toString()) + "\x1b[0m");
   buffers = Buffer.concat([buffers,b]);
-  DB(buffers)
+  //DB(buffers)
   consume(id, s)
 }
 
@@ -71,14 +71,15 @@ var state = 0;
 
 function consume (id, s) { // id socket
   var statein = state, msg;
-  DB("\x1b[33mconsume " + id + " " + state + "\x1b[0m");
+  //DB("\x1b[33mconsume " + id + " " + state + "\x1b[0m");
   while (!yeld) {
-    DB("\x1b[1;30m[SM " + state + "]\x1b[0m");
+    //DB("\x1b[1;30m[SM " + state + "]\x1b[0m");
     switch (state) {
     case 0: // READ HEADERS AND UPDATE WEBSOCKET PROTOCOL
       consumeHttpHeaders(id, s);
       break;
      case 1:
+      s.write(Uint8Array.of(0x82, 0x02, 0, id), "binary")
       s.write("\x81\x11Welcome To Server", "binary")
       s.write("\x89\x08Welcome!", "binary");
       state = 2;
@@ -91,6 +92,14 @@ function consume (id, s) { // id socket
       break;
     case 4:
       consumeMsgPong(id);
+      break;
+    case 5:
+      msg = consumeMsgBinary(id);
+      if (!yeld) { consumeDecodedMsgBinary(msg, s); }
+      break;
+    case 88:
+      msg = consumeMsgText(id);
+      if (!yeld) { state = 99; } // Close connection so we're done.
       break;
     case 99:
       yeld = true;
@@ -105,8 +114,14 @@ function getNextState (id) {
     case 0x81 :
       state = 3; // Text
       break;
+    case 0x82 :
+      state = 5; // Binary
+      break;
     case 0x8a :
       state = 4; // PONG
+      break;
+    case 0x88 :
+      state = 88; // Closing
       break;
     default :
       state = 99;
@@ -123,11 +138,20 @@ function writeStream (msg, s) {
   s.write("\x81" + String.fromCharCode(len) + msg, "binary");
 }
 
+function writeStreamBinary (msg, s) {
+  var buff = Buffer.concat([Uint8Array.of(0x82, msg.byteLength), msg]);
+  //DB("<sendbin<" + buff.length + " bytes."); // buff.map( (x) => x.toString(16)));
+  s.write(buff, "binary");
+}
+
+function consumeDecodedMsgBinary (msg, s) {
+  //DB("[bin-dec]" + msg.readUInt8(0) + " " + msg.readUInt8(1) + " " + msg.readFloatBE(2) + " " + msg.readFloatBE(6) + " " + msg.readFloatBE(10));
+  writeStreamBinary(msg, s);
+}
+
 function consumeDecodedMsg (msg, s) {
-  var msgs = msg.split(' ')
-  if (msgs[0] == 'l') {
-    writeStream(msgs[2] + " " + msgs[3] + " " + msgs[4], s);
-  }
+  //var msgs = msg.split(' ')
+  //if (msgs[0] == 'l') { writeStream(msgs[2] + " " + msgs[3] + " " + msgs[4], s); }
 }
 
 // Doesn't consume buffer until entire pong command is evaluated.
@@ -143,6 +167,24 @@ function consumeMsgText (id) {
   var mask = buffers.slice(2,6); // mask index and mask array
   var msg = buffers.slice(6,6+len).map((c,i,b)=>c^buffers[2+i%4]).toString();
   DB("[text]"+msg);
+  global.msg=msg
+  buffers = buffers.slice(6+len); // pop what we just consumed
+  state = 2;
+  return msg;
+}
+
+function consumeMsgBinary (id) {
+  if (buffers.length < 2 ) { yeld = true; return; }
+
+  var ml = buffers[1]
+  var mask = ml & 0b10000000;
+  var len  = ml & 0b01111111;
+  if (125 < len) { state = 99; return; } // TODO Handle extended payload langths.
+
+  if (buffers.length < (4 + len)) { yeld = true; return; }
+  var mask = buffers.slice(2,6); // mask index and mask array
+  var msg = buffers.slice(6,6+len).map((c,i,b)=>c^buffers[2+i%4])
+  //DB("[bin]"+msg);
   buffers = buffers.slice(6+len); // pop what we just consumed
   state = 2;
   return msg;
@@ -200,9 +242,9 @@ function websocketSwitchProtocol (s) {
 ////////////////////////////////////////////////////////////////////////////////
 // REPL
 ////////////////////////////////////////////////////////////////////////////////
-//const Repl  = require('repl');
-//const qrepl = Repl.start({prompt:'REPL>', useGlobal:true, replMode:Repl.REPL_MODE_SLOPPY});
-//qrepl.on('exit', ()=>process.exit());
+const Repl  = require('repl');
+const qrepl = Repl.start({prompt:'REPL>', useGlobal:true, replMode:Repl.REPL_MODE_SLOPPY});
+qrepl.on('exit', ()=>process.exit());
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -238,5 +280,8 @@ let implies IIFE immediate invoked function expression
 
 # USEFUL
  console.log(util.inspect(qrepl, {showHidden:true, depth:10, colors:1}))
+
+# Float32Array
+ a typed array 
 
 *******************************************************************************/

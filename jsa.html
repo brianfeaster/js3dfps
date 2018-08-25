@@ -1,14 +1,14 @@
 <html>
 <head>
   <style>
-    body, body, canvas, p { background: black; color: #0f0; padding:0; border:0; margin:0; height=100%; width=100%; }
+    body, canvas, p { background: black; color: #0f0; padding:0; border:0; margin:0; height=100%; width=100%; }
     .off { display:none; }
   </style>
 </head>
 
 <body id="pcanvas">
   <canvas id="mycanvas"></canvas>
-  <p id="DB" style="color:white; position:fixed; right:0; bottom:0; width:20em; max-height:20em; background:#0f01; overflow:auto; white-space:pre"></p>
+  <p id="DB" style="position:fixed; right:0; bottom:0; width:20em; max-height:20em; background:#0f01; overflow:auto; white-space:pre"></p>
 </body><script>
 
 
@@ -2085,12 +2085,22 @@ function Main () {
     // BF: TODO
     // Update server of my wareabouts.
     if (socket.readyState && (last.d != mouseLookX || last.x != pacman.locam.x || last.y != pacman.locam.y)) {
+        //var b = Uint8Array.alloc(1+1+8+8+8);
         last.d = mouseLookX;
         last.x = pacman.locam.x;
         last.y = pacman.locam.y;
-        socket.send("l 0 " + last.d.toFixed(3) + " " + last.x.toFixed(3) + " " + last.y.toFixed(3));
-        DB(last.d.toFixed(3) + " " + last.x.toFixed(3) + " " + last.y.toFixed(3));
+
+        var buff = new ArrayBuffer(14);
+        var db = new DataView(buff);
+        db.setUint8(0, 1); // 1 is move
+        db.setUint8(1, 2); // this will be the id
+        db.setFloat32(2, last.d);
+        db.setFloat32(6, last.x);
+        db.setFloat32(10, last.y);
+        //DB("sending" + buff.byteLength + " bytes.");
+        socket.send(buff);
     }
+
 
     if (!quit) setTimeout(function(){mainRenderLoop()}, 10);
     else DB ("done.");
@@ -2281,22 +2291,35 @@ function Main () {
 
 window.onload = function () { Main(); }
 var socket = new WebSocket('ws://world.dv8.org:7199')
+socket.binaryType = "arraybuffer";
 
 socket.onopen = function (event) {
   DB("websocket connected.");
-  //socket.send("\000\000\000\000");
 }
 
 socket.onclose = function (event) {
   DB("websocket closed.");
 }
 
+
 socket.onmessage = function (event) {
-  var msg = event.data.split(' ');
-  DB("websocket receive:" + event.data);
-  rem.d = parseFloat(msg[0]);
-  rem.x = parseFloat(msg[1]);
-  rem.y = parseFloat(msg[2]);
+  var msg = event.data;
+  if (typeof msg == "string") {
+    DB.post("str", msg);
+  } else if (msg instanceof ArrayBuffer) {
+    var dv = new DataView(msg);
+    var cmd = dv.getUint8(0);
+    if (cmd == 0) {
+      DB.post("user", dv.getUint8(1));
+    } else if (cmd == 1) {
+      rem.d = dv.getFloat32(2);
+      rem.x = dv.getFloat32(6);
+      rem.y = dv.getFloat32(10);
+      DB.post("mov", dv.getUint8(0) +" "+ dv.getUint8(1) +" "+ rem.d.toFixed(2) +" "+ rem.x.toFixed(2) +" "+ rem.y.toFixed(2));
+    }
+  } else {
+    DB.post("???", msg + typeof msg);
+  }
 }
 
 
