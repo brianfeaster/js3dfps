@@ -10,8 +10,7 @@
   <canvas id="mycanvas"></canvas>
   <p id="DB" style="position:fixed; right:0; bottom:0; width:20em; max-height:20em; background:#0f01; overflow:auto; white-space:pre"></p>
 </body><script>
-
-
+"use strict";
 
 var stars=document.createElement("img");
 stars.src="stars.jpg";
@@ -287,7 +286,6 @@ function Trajectory (ent, gravity, ang, vel) {
 ***************************************/
 function Entity (label, aryam, dir0) {
   this.label = label;
-  this.mode = 0; // 0 = pacman   1 = ghost
 
   this.locticker = new Ticker();
   this.locfr = {x:aryam[0], y:aryam[1], z:aryam[2]}; // Initial position, beginning tick range
@@ -531,8 +529,7 @@ function Entity (label, aryam, dir0) {
 /* Generate Polygonal Convex Surfaces
 */
 
-function pcsGenCubeRGB (l) {
-  var l = l || 0.5;
+function pcsGenCubeRGB (l=0.5) {
   return {
     points: [-l, -l, -l,   l, -l, -l,   l, l, -l,   -l, l, -l,
              -l, -l,  l,   l, -l,  l,   l, l,  l,   -l, l,  l],
@@ -544,10 +541,7 @@ function pcsGenCubeRGB (l) {
             {label:"right",  fill:"004f", edge:"00ff", face: [2,  1,  5,  6]}]};
 };
 
-function pcsGenCubeSolid (l, f, e) {
-  var l = l || 0.5;
-  var f = f || "008f";
-  var e = e || "00ff";
+function pcsGenCubeSolid (l=0.5, f="008f", e="00ff") {
   return {
     points: [-l, -l, -l,   l, -l, -l,   l, l, -l,   -l, l, -l,
              -l, -l,  l,   l, -l,  l,   l, l,  l,   -l, l,  l],
@@ -559,19 +553,13 @@ function pcsGenCubeSolid (l, f, e) {
             {label:"right",  fill:f, edge:e, face: [2,  1,  5,  6]}]};
 };
 
-function pcsGenFloor (l, f, e) {
-  var l = l || 0.5;
-  var f = f || "00ff";
-  var e = e || "008f";
+function pcsGenFloor (l=0.5, f="00ff", e="008f") {
   return {
     points: [-l,-l,0,  l,-l,0,  l,l,0,  -l,l,0],
     faces:  [{label:"floor", fill:f, edge:e, face: [0, 3, 2, 1]}]};
 }
 
-function pcsGenPyramidSolid (l, f, e) {
-  var l = l || 0.5
-  var f = f || "0f0f";
-  var e = e || "080f";
+function pcsGenPyramidSolid (l=0.5, f="0f0f", e="080f") {
   return {
     points: [-l,-l,0,  l,-l,0,  l,l,0,  -l,l,0,  0,0,l*2],
     faces: //[["bottom", fill, edge], 0, 1, 2, 3],
@@ -581,8 +569,7 @@ function pcsGenPyramidSolid (l, f, e) {
             {label:"right", fill:f, edge:e, face:[ 2, 1, 4]}]};
 }
 
-function pcsGenCubeRainbow (l) {
-  var l = l || 0.5;
+function pcsGenCubeRainbow (l=0.5) {
   return {
     points: [-l, -l, -l,   l, -l, -l,   l, l, -l,   -l, l, -l,
              -l, -l,  l,   l, -l,  l,   l, l,  l,   -l, l,  l],
@@ -594,10 +581,117 @@ function pcsGenCubeRainbow (l) {
             {label:"right",  fill:"a0af", edge:"f0ff", face: [2,  1,  5,  6]}]};
 }
 
-//var pspec_maze    = pspecGenerateUnitCube("maze", "#88f7", "#00ff");
-//var pspec_pill    = pspecGenerateUnitCube("pill", "#fff9", "#ffff");
+var pcsGen18gon = function (f="880f", e="ff0f", p=0.4142) {
+  return {
+    points: [-p, -p, 1, // 0
+             -p, p, 1,  // 1
+              p, p, 1,   // 2
+              p, -p, 1,  // 3
+               -p, -1, p,  // 4
+               -1, -p, p,  // 5
+               -1, p, p,   // 6
+               -p, 1, p,   // 7
+              p, 1, p, // 8
+              1, p, p, // 9
+              1, -p, p, // 10
+              p, -1, p, // 11
+               -p, -p, 0, // 12
+               -p, p, 0, // 13
+               p, p, 0, // 14
+               p, -p, 0], // 15
+    faces: [ {label:"top", fill:"770f", edge:e, face:[0, 1, 2, 3]},
+
+             {label:"l1", fill:"770f", edge:e, face:[4, 5, 0]},
+             {label:"l1", fill:"770f", edge:e, face:[5, 6, 1, 0]},
+             {label:"l1", fill:"770f", edge:e, face:[6, 7, 1]},
+             {label:"l1", fill:"700f", edge:e, face:[7, 8, 2, 1]},
+             {label:"l1", fill:"770f", edge:e, face:[8, 9, 2]},
+             {label:"l1", fill:"770f", edge:e, face:[9, 10, 3, 2]},
+             {label:"l1", fill:"770f", edge:e, face:[10, 11, 3]},
+             {label:"l1", fill:"770f", edge:e, face:[11, 4, 0, 3]},
+
+             {label:"l1", fill:"770f", edge:e, face:[5, 4, 12]},
+             {label:"l1", fill:"770f", edge:e, face:[6, 5, 12, 13]},
+             {label:"l1", fill:"770f", edge:e, face:[7, 6, 13]},
+             {label:"l1", fill:"770f", edge:e, face:[8, 7, 13, 14]},
+             {label:"l1", fill:"770f", edge:e, face:[9, 8, 14]},
+             {label:"l1", fill:"770f", edge:e, face:[10, 9, 14, 15]},
+             {label:"l1", fill:"770f", edge:e, face:[11, 10, 15]},
+             {label:"l1", fill:"770f", edge:e, face:[4, 11, 15, 12]},
+
+             {label:"top", fill:"770f", edge:e, face:[15, 14, 13, 12]}]};
+};
+
+var pcsGenGhost = function () {
+  var f="f0fa", fe="f008", e="000f";
+  return {
+    points:
+      [0, 0, .8,    // a0  0
+       -.2, -.2, .7,// a1  1
+       -.2, .2, .7, // b1  2
+       .2, .2, .7,  // c1  3
+       .2, -.2, .7, // d1  4
+      -.3,  0, .5, // a2  5
+        0, .3, .5, // b2  6
+      .3,   0, .5, // c2  7
+       0, -.3, .5, // d2  8
+       -.24, -.24, .5, // aa2 9
+       -.24,  .24, .5, // bb2 10
+        .24,  .24, .5, // cc2 11
+        .24, -.24, .5, // dd2 12
+      -.3,   0, .0, // a3 13
+        0,  .3, .0, // b3 14
+       .3,  .0, .0, // c3 15
+        0, -.3, .0, // d3 16
+       -.24, -.24, .0, // aa3 17
+       -.24,  .24, .0, // bb3 18
+        .24,  .24, .0, // cc3 19
+        .24, -.24, .0],// dd3 20
+    faces:[
+     {label:"topa", fill:f, edge:e, face:[0, 1, 2]},
+     {label:"topb", fill:f, edge:e, face:[0, 2, 3]},
+     {label:"topc", fill:f, edge:e, face:[0, 3, 4]},
+     {label:"topd", fill:f, edge:e, face:[0, 4, 1]},
+
+     {label:"mida", fill:f, edge:e, face:[2, 1, 5]},
+     {label:"midb", fill:f, edge:e, face:[3, 2, 6]},
+     {label:"midc", fill:f, edge:e, face:[4, 3, 7]},
+     {label:"midd", fill:f, edge:e, face:[1, 4, 8]},
+
+     {label:"midaal", fill:fe, edge:e, face:[1, 9, 5]},
+     {label:"midbbl", fill:f, edge:e, face:[2, 10, 6]},
+     {label:"midccl", fill:f, edge:e, face:[3, 11, 7]},
+     {label:"midddl", fill:f, edge:e, face:[4, 12, 8]},
+
+     {label:"midaar", fill:f, edge:e, face:[1, 8, 9]},
+     {label:"midbbr", fill:fe, edge:e, face:[2, 5, 10]},
+     {label:"midccr", fill:f, edge:e, face:[3, 6, 11]},
+     {label:"midddr", fill:f, edge:e, face:[4, 7, 12]},
+
+     {label:"lowaa", fill:f, edge:e, face:[17,  5, 9]},
+     {label:"lowaa", fill:f, edge:e, face:[17,  13,  5]},
+     {label:"lowaa", fill:f, edge:e,  face:[13, 18,  5]},
+     {label:"lowaa", fill:f, edge:e, face:[18, 10,  5]},
+
+     {label:"lowaa", fill:f, edge:e, face:[18,  6, 10]},
+     {label:"lowaa", fill:f, edge:e, face:[18,  14,  6]},
+     {label:"lowaa", fill:f, edge:e, face:[ 14, 19,  6]},
+     {label:"lowaa", fill:f, edge:e, face:[19, 11,  6]},
+
+     {label:"lowaa", fill:f, edge:e, face:[19,  7, 11]},
+     {label:"lowaa", fill:f, edge:e, face:[19,  15,  7]},
+     {label:"lowaa", fill:f, edge:e, face:[ 15, 20,  7]},
+     {label:"lowaa", fill:f, edge:e, face:[20, 12,  7]},
+
+     {label:"lowaa", fill:f, edge:e, face:[20,  8, 12]},
+     {label:"lowaa", fill:f, edge:e, face:[20,  16,  8]},
+     {label:"lowaa", fill:f, edge:e, face:[ 16, 17,  8]},
+     {label:"lowaa", fill:f, edge:e, face:[17, 9,  8]}]};
+}
+
 
 function hexToRgb (str) { // "f00f" => {r:255, g:0, b:0, a:1.0}
+  var r,g,b,a;
   r = parseInt(str.charAt(0), 16)*17;
   g = parseInt(str.charAt(1), 16)*17;
   b = parseInt(str.charAt(2), 16)*17;
@@ -676,7 +770,7 @@ function pcGen (label, pcs) {
   }
   self.rightMulXform = function (xf) {
     if (!xf) { return self; }
-    var lxf = txform || xform; // Use the temporary xform, or base xform.
+    var lxf = txform || xform; // Use the crrent temporary xform, or base xform.
     txform = (lxf ? pgMultXformXformNew(lxf, xf) : xf.slice(0));
     return self;
   }
@@ -705,7 +799,7 @@ function pcGen (label, pcs) {
 
   self.dump = function () {
     console.log((
-     `${label} c${center.stringify()} ${points.groupby(3).tomap().stringify().replace(/[{}:]/g, '')}\n` +
+     `${self.label} c${center.stringify()} ${points.groupby(3).tomap().stringify().replace(/[{}:]/g, '')}\n` +
      `${(xform||[]).groupby(4).map(JSON.stringify).join('\n')}\n` +
      `c${tcenter.stringify()} ${tpoints.groupby(4).tomap().stringify()}\n` +
      `${txform.groupby(4).map(JSON.stringify).join('\n')}\n` +
@@ -718,364 +812,25 @@ function pcGen (label, pcs) {
 
 
 
-/***************************************
-  The_models Model specification's are functionally generated of the form:
-
-  ["label",                                           Name of model
-   [vertices],                                        Array of vertices
-   [[label, fillColor, edgeColor], vertexIndex,...],  A polygon representing a face of the object
-   ...                                                More faces
-  ]
-
-  These need to be compiled into model objects for consumption by this program.
-
-  I tried representing objects within a unit volume.  I'll now try a normalized volume which
-  is defined starting at the origin and extending no more than 1 in any direction.
-
-  An array of vertices and a separate array of faces composed of indices into the vertex array.
-  I wonder if this is the definition of a mesh.
-***************************************/
-
-var pspec_simple = (function () {
-  return [
-    "simple",                    // Name/label
-    //   0        1        2     // Vertices
-    [[-1,0,0], [1,0,0], [0,1,0]],
-    [["triangle", "#0f0", "#f0f"], 0, 1, 2]]; // First and only face
-})();
-
-
-/* generate a ghost
-*/
-var pspec_ghost = (function () {
-  var fill="#f0fa", feye="#f008", edge="#000f";
-  var vectors = [
-      [0, 0, .8],    // a0  0
-      [-.2, -.2, .7],// a1  1
-      [-.2, .2, .7], // b1  2
-      [.2, .2, .7],  // c1  3
-      [.2, -.2, .7], // d1  4
-     [-.3,  0, .5], // a2  5
-     [  0, .3, .5], // b2  6
-     [.3,   0, .5], // c2  7
-     [ 0, -.3, .5], // d2  8
-      [-.24, -.24, .5], // aa2 9
-      [-.24,  .24, .5], // bb2 10
-      [ .24,  .24, .5], // cc2 11
-      [ .24, -.24, .5], // dd2 12
-     [-.3,   0, .0], // a3 13
-     [  0,  .3, .0], // b3 14
-     [ .3,  .0, .0], // c3 15
-     [  0, -.3, .0], // d3 16
-      [-.24, -.24, .0], // aa3 17
-      [-.24,  .24, .0], // bb3 18
-      [ .24,  .24, .0], // cc3 19
-      [ .24, -.24, .0]];// dd3 20
-  return ["ghost", vectors,
-    [["topa", fill, edge], 0, 1, 2],
-    [["topb", fill, edge], 0, 2, 3],
-    [["topc", fill, edge], 0, 3, 4],
-    [["topd", fill, edge], 0, 4, 1],
-
-    [["mida", fill, edge], 2, 1, 5],
-    [["midb", fill, edge], 3, 2, 6],
-    [["midc", fill, edge], 4, 3, 7],
-    [["midd", fill, edge], 1, 4, 8],
-
-    [["midaal", feye, edge], 1, 9, 5],
-    [["midbbl", fill, edge], 2, 10, 6],
-    [["midccl", fill, edge], 3, 11, 7],
-    [["midddl", fill, edge], 4, 12, 8],
-
-    [["midaar", fill, edge], 1, 8, 9],
-    [["midbbr", feye, edge], 2, 5, 10],
-    [["midccr", fill, edge], 3, 6, 11],
-    [["midddr", fill, edge], 4, 7, 12],
-
-    [["lowaa", fill, edge], 17,  5, 9],
-    [["lowaa", fill, edge], 17,  13,  5],
-    [["lowaa", fill, edge],  13, 18,  5],
-    [["lowaa", fill, edge], 18, 10,  5],
-
-    [["lowaa", fill, edge], 18,  6, 10],
-    [["lowaa", fill, edge], 18,  14,  6],
-    [["lowaa", fill, edge],  14, 19,  6],
-    [["lowaa", fill, edge], 19, 11,  6],
-
-    [["lowaa", fill, edge], 19,  7, 11],
-    [["lowaa", fill, edge], 19,  15,  7],
-    [["lowaa", fill, edge],  15, 20,  7],
-    [["lowaa", fill, edge], 20, 12,  7],
-
-    [["lowaa", fill, edge], 20,  8, 12],
-    [["lowaa", fill, edge], 20,  16,  8],
-    [["lowaa", fill, edge],  16, 17,  8],
-    [["lowaa", fill, edge], 17, 9,  8]];
-})();
-
-
-var pspec_pacman = (function () {
-  var edge="#ff0f";
-  var p=0.4142;
-  var vertices = [
-        [-p, -p, 1], // 0
-        [-p, p, 1],  // 1
-        [p, p, 1],   // 2
-        [p, -p, 1],  // 3
-     [-p, -1, p],  // 4
-     [-1, -p, p],  // 5
-     [-1, p, p],   // 6
-     [-p, 1, p],   // 7
-       [p, 1, p], // 8
-       [1, p, p], // 9
-       [1, -p, p], // 10
-       [p, -1, p], // 11
-     [-p, -p, 0], // 12
-     [-p, p, 0], // 13
-     [p, p, 0], // 14
-     [p, -p, 0]]; // 15
-  return ["pacman", vertices,
-  [["top", "#770f", edge], 0, 1, 2, 3],
-
-  [["l1", "#770f", edge], 4, 5, 0],
-  [["l1", "#770f", edge], 5, 6, 1, 0],
-  [["l1", "#770f", edge], 6, 7, 1],
-  [["l1", "#770f", edge], 7, 8, 2, 1],
-  [["l1", "#770f", edge], 8, 9, 2],
-  [["l1", "#770f", edge], 9, 10, 3, 2],
-  [["l1", "#770f", edge], 10, 11, 3],
-  [["l1", "#770f", edge], 11, 4, 0, 3],
-
-  [["l1", "#770f", edge], 5, 4, 12],
-  [["l1", "#770f", edge], 6, 5, 12, 13],
-  [["l1", "#770f", edge], 7, 6, 13],
-  [["l1", "#770f", edge], 8, 7, 13, 14],
-  [["l1", "#770f", edge], 9, 8, 14],
-  [["l1", "#770f", edge], 10, 9, 14, 15],
-  [["l1", "#770f", edge], 11, 10, 15],
-  [["l1", "#770f", edge], 4, 11, 15, 12],
-
-  [["top", "#770f", edge], 15, 14, 13, 12]];
-})();
-
-
-
-/***************************************
-  Face_object construction
-    { label:    "",          Name of this face
-      colorFill:{r=0,g=128,b=255,a=1}    Inner fill color
-      colorEdge:{r=0,g=128,b=255,a=1}    Border color
-      colorEdgeStr:{r,g,b,a}    Border color
-      indices:  [5,0,2,...], Indices to an array of vertices that define one of the model's face
-      visible: true          Other flags...
-    }
-***************************************/
-function colorHashToRGB (str) {
-  var skipHash = str.charAt(0) == "#" ? 1 : 0;
-  r = parseInt(str.charAt(skipHash + 0), 16)*17;
-  g = parseInt(str.charAt(skipHash + 1), 16)*17;
-  b = parseInt(str.charAt(skipHash + 2), 16)*17;
-  a = parseInt(str.charAt(skipHash + 3), 16)/15;
-  if (isNaN(a)) a = 1;
-  return {r:r, g:g, b:b, a:a};
-}
-
-function faceNew (desc, indices) {
-  var colorFill = colorHashToRGB(desc[1]);
-  var colorEdge = colorHashToRGB(desc[2]);
-
-  return {label:     desc[0],
-          colorFill: colorFill,
-          colorEdge: colorEdge,
-          colorEdgeStr: `rgba(${colorEdge.r},${colorEdge.g},${colorEdge.b},${colorEdge.a})`,
-          indices:   indices}
-}
-//** TEST **********************************************************************
-(function TESTfaceNew () {
-  var face = faceNew(["testLabel", "#32Fe", "#F200"], [1,2,3]);
-  TESTCmpObj(face.colorFill, {r:51,  g:34, b:255, a:0.933333});
-  TESTCmpObj(face.colorEdge, {r:255, g:34, b:0,   a:0});
-  console.log(face.colorFill);
-  console.log(face.colorEdge);
-  console.log("PASS TESTfaceNew");
-})();
-//******************************************************************************
-
-
-
-
-/***************************************
-  Group_object Create a 3d object (convex enclosure of convex faces) for transforming
-  a model:
-
-    [ "name",
-      [[vertex],...],
-      [[label, colorFill, colorEdge], vertex_index,...]...
-    ]
-
-  => into a group:
-
-    {label:        "object name",
-     verticesBase: [vertex,..., midPoint], Original vertices
-     transformBase:[4x4 matrix],           Base transform for base vertices
-     faces:        [FaceObject,...],
-     invisible:    false,
-     transform:    [4x4 matrix],           Mutable transformation matrix
-     vertices:     [vertex,...],           Mutable vertices
-     vertexCenter: [vertex]}               Array containing the center vertex
-
- The last vertex represents the mid vector of all points.  It's used for sorting
- during rendering.
-***************************************/
-function groupInitialize (pspec) {
-  var newGroup={};
-  var vertices, face, desc;
-  var count=0, x=0, y=0, z=0; // Used to find the center pointer of object
-
-  newGroup.label = pspec[0];
-  newGroup.verticesBase = vertices = copyAryAry(pspec[1]);
-  newGroup.vertices = [];
-  newGroup.vertexCenter = []; // Array of
-  newGroup.transformBase = false;
-  newGroup.faces = [];
-  newGroup.invisible = false;
-
-  for (var f=0; f<pspec.length-2; ++f) {
-    face = pspec[f+2]; // +2 to skip over the "name" and vertices
-    // Pass desc and indices separately
-    desc = face[0];
-    face = face.slice(1);
-    newGroup.faces[f] = faceNew(desc, face);
-  }
-
-  // Average each x, y and z points to determine center of all points
-  for (var v=0; v<vertices.length; ++v) {
-    var pts = vertices[v];
-    x += pts[0];
-    y += pts[1];
-    z += pts[2];
-    ++count;
-  }
-
-  // Add center point to vertices
-  newGroup.verticesBase.push([x/count, y/count, z/count]);
-
-  return newGroup;
-}
-//** TEST **********************************************************************
-(function TESTgroupInitialize () {
-  var group = groupInitialize(pspec_simple);
-  TESTCmpAry(group.verticesBase[0], [-1,0,0]);
-  TESTCmpAry(group.verticesBase[1], [1,0,0]);
-  TESTCmpAry(group.verticesBase[2], [0,1,0]);
-  TESTCmpAry(group.verticesBase[3], [0, 0.333333,0]);
-  TESTCmpAry(group.faces[0].indices, [0, 1, 2]);
-  TESTCmp(group.verticesBase.length, 4);
-
-  console.log("PASS TESTgroupInitialize");
-})();
-//******************************************************************************
-
-
-
-/* Copies group's verticesBase to vertices for transforming
-*/
-function groupLoadVerticesBase (group) {
-   for (var i=0; i<group.verticesBase.length; ++i) {
-     group.vertices[i] = group.verticesBase[i].slice(0); // Replace each vector with a new one
-   }
-}
-//** TEST **********************************************************************
-(function TESTgroupLoadVerticesOriginal () {
-  var g = groupInitialize(pspec_simple);
-  // Perform the load
-  groupLoadVerticesBase(g);
-  // Modify copied verticies
-  g.vertices[0][1]=8;
-  g.vertices[0][2]=9;
-  g.vertices[3][0]=7;
-  g.vertices[3][2]=6;
-  // Verify points
-  TESTCmp(g.verticesBase.length, 4);
-  TESTCmp(g.vertices.length, 4);
-  TESTCmpAryAry(g.verticesBase, [[-1,0,0],[1,0,0],[0,1,0],[0, 0.333333,0]]);
-  TESTCmpAryAry(g.vertices,         [[-1,8,9],[1,0,0],[0,1,0],[7, 0.333333,6]]);
-  console.log("PASS TESTfaceLoadVerticesOriginal");
-})();
-//******************************************************************************
-
 function distLocLoc(loc, locb) {
   return Math.sqrt(square(loc.x - locb.x) +
                    square(loc.y - locb.y) +
                    square(loc.z - locb.z));
 }
-function distLocVertex(loc, vertex) {
-  return Math.sqrt(square(2*loc.x - vertex[0]) +
-                   square(2*loc.y - vertex[1]) +
-                   square(2*loc.z - vertex[2]));
-}
 
 
-/***************************************
-  Vertex_transforms
-  Copy and transform matrices and lists of vectors
-***************************************/
-function groupTransformMatVerticesOriginal (mat, group) {
-  groupLoadVerticesBase(group);
-  matMultMatVecs(mat, group.vertices);
-}
-
-/* Transform group center vertices by mat
-*/
-function groupTransformMatVertexCenter (mat, group) {
-  // So we can use the general list of points transformation function, create a list of lenght 1 point.
-  group.vertexCenter[0] = group.verticesBase[group.verticesBase.length-1].slice(0);
-  matMultMatVecs(mat, group.vertexCenter);
-}
-
-
-/*
-    3 multiplies
-    0 additions
-    3 reads
-    3 writes
-*/
-function scale (vectors, a, b, c) {
-  for (i=0; i<vectors.length; ++i) { // Over every vector
-   var v = vectors[i]; // Consider vector
-    v[0] *= a;
-    v[1] *= b;
-    v[2] *= c;
+function pgScale (points, a, b, c) {
+  var i, v;
+  for (i=0; i<points.length; i+=4) { // Over every vector
+    points[i] *= a;
+    points[i+1] *= b;
+    points[i+2] *= c;
   }
 }
 
 
-function rotateZ (vectors, angle) {
-  for (i=0; i<vectors.length; ++i) { // Over every vector
-   var v = vectors[i]; // Consider vector
-   var x = v[0];
-   var y = v[1];
-    v[0] = x*cos(angle) - y*sin(angle); // Mutate x
-    v[1] = y*cos(angle) + x*sin(angle); // Mutate y
-  }
-}
-
-function perspective (vectors, per) {
-  var skip=false;
-  for (i=0; i<vectors.length; ++i) { // Over every vector
-   var v = vectors[i]; // Consider vector
-   var x = v[0];
-   var y = v[1];
-   var z = v[2];
-   var p = per / y;
-   v[0] = x * p;
-   v[2] = z * p;
-   if (y < 0 ) skip = true;
-  }
-  return skip;
-}
 function pgPerspective (vectors, per) {
-  var skip=false;
+  var i, skip=false;
   for (i=0; i<vectors.length; i+=4) { // Over every vector
    var x = vectors[i+0];
    var y = vectors[i+1];
@@ -1087,26 +842,6 @@ function pgPerspective (vectors, per) {
   }
   return skip;
 }
-
-
-/* Transform all the original vertices for each face in the group.
-*/
-function scaleGroupVerticesOriginal (group, x, y, z) {
-  scale(group.verticesBase, x, y, z);
-  return group;
-}
-//** TEST **********************************************************************
-(function TESTscaleGroupVerticesOriginal () {
-  var g = groupInitialize(pspec_simple);
-  // Perform the scale transformation
-  scaleGroupVerticesOriginal(g, 2, 2, 2);
-  // Verify points
-  TESTCmp(g.verticesBase.length, 4);
-  TESTCmpAryAry(g.verticesBase, [[-2,0,0],[2,0,0],[0,2,0],[0, 0.666667,0]]);
-  console.log("PASS TESTscaleGroupVerticesOriginal ");
-})();
-//******************************************************************************
-
 
 
 /* Compute the normal vector of the plane defined by three points
@@ -1229,85 +964,6 @@ function pgMatrix() {
   return mat;
 }
 
-//console.log(`===============================`);
-//var m = pgMatrix().dumpMat().scale(2,2,2).rightScale(3,4,5).rightTrans(2,4,6).dumpMat();
-//console.log(m)
-
-
-
-/***************************************
-  Matrix_library
-***************************************/
-function matNewIdent () {
-  return [[1, 0, 0, 0],
-          [0, 1, 0, 0],
-          [0, 0, 1, 0],
-          [0, 0, 0, 1]];
-}
-
-function matGenRotX (a) { // PG transformation matrix
-  var c = cos(a);
-  var s = sin(a);
-  return [0, 0,  0, 0,
-          0, c, -s, 0,
-          0, s,  c, 0,
-          0, 0,  0, 1];
-}
-
-function matNewRotZ (a) {
-  var cosa = cos(a);
-  var sina = sin(a);
-  return [[cosa, -sina, 0, 0],
-          [sina,  cosa, 0, 0],
-          [   0,     0, 1, 0],
-          [   0,     0, 0, 1]];
-}
-
-function matGenTrans (x, y, z) {
-  return [1, 0, 0, x,
-          0, 1, 0, y,
-          0, 0, 1, z,
-          0, 0, 0, 1];
-}
-function matGenScale (x, y, z) {
-  return [x, 0, 0, 0,
-          0, y, 0, 0,
-          0, 0, z, 0,
-          0, 0, 0, 1];
-}
-function matNewTranslate (x, y, z) {
-  return [[1, 0, 0, x],
-          [0, 1, 0, y],
-          [0, 0, 1, z],
-          [0, 0, 0, 1]];
-}
-
-function matNewScale (x, y, z) {
-  return [[x, 0, 0, 0],
-          [0, y, 0, 0],
-          [0, 0, z, 0],
-          [0, 0, 0, 1]];
-}
-/*
-   Mutate a transformation matrix with a post scale.
-
-   12 multiplies
-    0 additions
-   12 reads
-   12 writes
-
-   abcd   x000   ax by cz d
-   efgh * 0y00 = ex fy gz h
-   ijkl   00z0   ix jy kz l
-   mnop   0001   mx ny oz p
-*/
-function matAddScale (mat, x, y, z) {
-  var i, row;
-  for (i=0; i<4; ++i) {
-    row=mat[i];
-    row[0]*=x; row[1]*=y; row[2]*=z;
-  }
-}
 
 /*
    Mutate a transformation matrix with a post translation.
@@ -1323,7 +979,7 @@ function matAddScale (mat, x, y, z) {
    mnop   0001   m  n  o   mx+ny+oz+p
 */
 function matAddTranslate (mat, x, y, z) {
-  var i;
+  var i, row;
   for (i=0; i<4; ++i) {
     row=mat[i];
     row[3] +=  row[0]*x + row[1]*y + row[2]*z;
@@ -1332,12 +988,10 @@ function matAddTranslate (mat, x, y, z) {
 }
 
 
-/*
-   abcd   x000   ax by cz d
+/* abcd   x000   ax by cz d
    efgh * 0y00 = ex fy gz h  
    ijkl   00z0   ix jy kz l
-   mnop   0001   mx ny oz p
-*/
+   mnop   0001   mx ny oz p */
 function pgMulRightScale (mat, x, y, z) {
   mat[ 0] *= x;  mat[ 1] *= y;  mat[ 2] *= z;
   mat[ 4] *= x;  mat[ 5] *= y;  mat[ 6] *= z;
@@ -1346,14 +1000,7 @@ function pgMulRightScale (mat, x, y, z) {
   return mat;
 }
 
-/*
-   Mutate a transformation matrix with a pre translation.
-
-   12 multiplies
-   12 additions
-   12 reads
-   12 writes
-
+/* Mutate a transformation matrix with a pre translation.
    100x   abcd   a+xm  b+xn  c+xo  d+xp
    010y * efgh = e+ym  f+yn  g+yo  h+yp
    001z   ijkl   i+zm  j+zn  k+zo  l+zp
@@ -1390,7 +1037,7 @@ function matAddTranslateR (x, y, z, mat) {
    mnop   0001   mx+nz  my+nx o p
 */
 function matAddRotZ (mat, ang) {
-  var i, a, b;
+  var i, a, b, row;
   var cosa = cos(ang);
   var sina = sin(ang);
 
@@ -1438,33 +1085,6 @@ function matAddRotZR (ang, mat) {
 }
 
 
-/*
-   Mutate a transformation matrix with a post rotation about the X axis
-
-   16 multiplies
-    8 additions
-    8 reads
-    8 writes
-
-   x=cos(ang)  y=-sin(ang) z=sin(ang)
-
-   abcd   1000   a  bx+cz  by+cx  d
-   efgh * 0xy0 = e  fx+gz  fy+gx  h
-   ijkl   0zx0   i  jx+kz  jy+kx  l
-   mnop   0001   m  ox+oz  ny+ox  p
-*/
-function matAddRotX (mat, ang) {
-  var i, a, b;
-  var cosa = cos(ang);
-  var sina = sin(ang);
-
-  for (i=0; i<4; ++i) {
-    row=mat[i];  a=row[1];  b=row[2];
-    row[1] =  cosa*a + sina*b;
-    row[2] = -sina*a + cosa*b;
-  }
-}
-
 function matAddPerspective (mat, per) {
 /*
   abcd            [x   [(x*per)/y
@@ -1483,49 +1103,6 @@ function matAddPerspective (mat, per) {
   }
 }
 
-/*
-  Pre-multiply mutate a column-major matrix of vectors by a row-major transformation matrix
-
-   N*16     multiplies
-   N*12     additions
-   N*4 + 16 reads
-   N*4      writes
-
- [[a b c d]     [[x         [[ax+by+cz+dw
-  [e f g h]   *   y  ...  =   ex+fy+gz+hw  ...
-  [i j k l]       z           ix+jy+kz+lw
-  [m n o p]]      w]    ]     mx+ny+oz+pw]     ]
-
-  row-major    column-major
-*/
-function matMultMatVecs (mat, vecs) {
-  var mat0=mat[0], mat1=mat[1], mat2=mat[2], mat3=mat[3];
-  var a=mat0[0], b=mat0[1], c=mat0[2], d=mat0[3];
-  var e=mat1[0], f=mat1[1], g=mat1[2], h=mat1[3];
-  var i=mat2[0], j=mat2[1], k=mat2[2], l=mat2[3];
-  var m=mat3[0], n=mat3[1], o=mat3[2], p=mat3[3];
-
-  var i, vec, x, y, z, w, ww, normalized;
-
-  for (ii=0; ii<vecs.length; ++ii) {
-     normalized=true;
-     // Consider a vector in the list
-     vec = vecs[ii];
-     x = vec[0];
-     y = vec[1];
-     z = vec[2];
-     w = vec[3];
-     if (undefined == w) { normalized=false;  w=1; }
-
-     ww       = x*m + y*n + z*o + w*p;
-     vec[0]   = (x*a + y*b + z*c + w*d)/ww;
-     vec[1]   = (x*e + y*f + z*g + w*h)/ww;
-     vec[2]   = (x*i + y*j + z*k + w*l)/ww;
-     if (normalized) {
-       vec[3] = 1;
-     }
-  }
-}
 
 /* Left multiply a transformation matrix with a list of vectors.  Both are linear arrays.
    [a b c d    [x x2
@@ -1534,7 +1111,7 @@ function matMultMatVecs (mat, vecs) {
     m n o p]
 */
 function matMul4Mat3VecLinear (mat, vec) {
-  var q=0;
+  var r, q=0;
   var a=mat[q++], b=mat[q++], c=mat[q++], d=mat[q++];
   var e=mat[q++], f=mat[q++], g=mat[q++], h=mat[q++];
   var i=mat[q++], j=mat[q++], k=mat[q++], l=mat[q++];
@@ -1597,71 +1174,6 @@ function pgMultXformXformNew (x, y) {
   return z;
 }
 
-function matMultMatMat (x, y) {
-  var row;
-
-  row = x[0]; var a=row[0], b=row[1], c=row[2], d=row[3];
-  row = x[1]; var e=row[0], f=row[1], g=row[2], h=row[3];
-  row = x[2]; var i=row[0], j=row[1], k=row[2], l=row[3];
-  row = x[3]; var m=row[0], n=row[1], o=row[2], p=row[3];
-
-  row = y[0]; var A=row[0], B=row[1], C=row[2], D=row[3];
-  row = y[1]; var E=row[0], F=row[1], G=row[2], H=row[3];
-  row = y[2]; var I=row[0], J=row[1], K=row[2], L=row[3];
-  row = y[3]; var M=row[0], N=row[1], O=row[2], P=row[3];
-
-  row = y[0];
-  row[0] = a*A + b*E + c*I + d*M;
-  row[1] = a*B + b*F + c*J + d*N;
-  row[2] = a*C + b*G + c*K + d*O;
-  row[3] = a*D + b*H + c*L + d*P;
-
-  row = y[1];
-  row[0] = e*A + f*E + g*I + h*M;
-  row[1] = e*B + f*F + g*J + h*N;
-  row[2] = e*C + f*G + g*K + h*O;
-  row[3] = e*D + f*H + g*L + h*P;
-
-  row = y[2];
-  row[0] = i*A + j*E + k*I + l*M;
-  row[1] = i*B + j*F + k*J + l*N;
-  row[2] = i*C + j*G + k*K + l*O;
-  row[3] = i*D + j*H + k*L + l*P;
-
-  row = y[3];
-  row[0] = m*A + n*E + o*I + p*M;
-  row[1] = m*B + n*F + o*J + p*N;
-  row[2] = m*C + n*G + o*K + p*O;
-  row[3] = m*D + n*H + o*L + p*P;
-}
-/*** TEST **********************************************************************
-  Multiply identiy matrix a with b, mutating b.
-*/
-(function TESTmatMultMatMat () {
-  var a =
-   [[1, 0, 0, 0],
-    [0, 1, 0, 0],
-    [0, 0, 1, 0],
-    [0, 0, 0, 1]];
-  var b =
-   [[1, 2, 3, 4],
-    [5, 6, 7, 8],
-    [9, 10, 11, 12],
-    [13, 14, 15, 16]];
-
-  matMultMatMat(a,b);
-
-  TESTCmpAryAry(b,
-   [[1, 2, 3, 4],
-    [5, 6, 7, 8],
-    [9, 10, 11, 12],
-    [13, 14, 15, 16]]);
-  console.log("PASS TESTmatMultMatMat");
-
-})();
-//******************************************************************************
-
-
 
 
 /***************************************
@@ -1719,10 +1231,10 @@ var cmap = [
   "                                                                ",
   "                                                                ",
   "                           g g g g g                            ",
-  "                            g g g g                             ",
-  "                             g g g                              ",
-  "                              g g                               ",
-  "                               g                                ",
+  "                                                                ",
+  "                                                                ",
+  "                                                                ",
+  "                                                                ",
   "                                                                ",
   "                                                                ",
   "                                                                ",
@@ -1744,7 +1256,7 @@ for (var y=0; y<mapHeight; ++y) {
   map[y] = [];
   for (var x=0; x<mapWidth; ++x) {
     var c=0;
-    if (cmap[y].charAt(x) == " ") c = rnd(8) ? 1 : 2;
+    if (cmap[y].charAt(x) == " " && rnd(64)==0) c = 2;
     else if (cmap[y].charAt(x) == "x") c = 3;
     else if (cmap[y].charAt(x) == "s") c = 4;
     else if (cmap[y].charAt(x) == "g") c = 5;
@@ -1764,11 +1276,16 @@ var mapIsPill  = function (x, y) { return mapWithin(x,y) && 1 == map[y|0][x|0]; 
 /***************************************
   Globals
 ***************************************/
+var myq; // For debugging
 var last = {};
 var rem = {};
 var mouseLookX = PI0;
 var mouseLookY = PI0;
+var pacman2;
+var pacman;
+var quit = false;
 
+  var scene = []; // Simple array of renderable object groups.
 
 /***************************************
   Main
@@ -1781,27 +1298,22 @@ function Main () {
   var width = canvas.width = document.body.clientWidth; //parseInt(parentStyle.getPropertyValue("width"));
   var height = canvas.height = document.body.clientHeight;; //parseInt(parentStyle.getPropertyValue("height"));
   var lscale = 1; // Scale all object coordinates by this
-  var quit = false;
   var hud = true;
   var gas = [0,0,0,0]; // Literally the gas pedal in the North South East West directions
   var jumping = 0;
-  var mouseActive = false;
   var mouseRotX=0, mouseRotY=0;
   var elevation = .2;
   var collision = false;
   var score=0;
-  var scene = []; // Simple array of renderable object groups.
   var frameRateTime=getTime();
   var frameCount=0;
   var frameRate=0;
   var cannons = [];
-  var ghostGroups=[];
-  var ghostEntities=[];
+  var currentTime = getTime();
 
   context.translate(width/2, height/2); // Set canvas's origin to center
   function quitToggle () { DB("QUIT"); quit ^= 1; }
   function hudToggle () { hud ^= 1; }
-  //function gasToggle () { gas = (0 <= gas) ? -1 : 0; }
   function gasWalkNorth(v) { gas[0] = v; }
   function gasWalkSouth(v) { gas[1] = v; }
   function gasWalkEast(v)  { gas[2] = v; }
@@ -1813,17 +1325,37 @@ function Main () {
     cannons.push(Body(Trajectory(pacman, 15, PI80, 60))); // grav ang vel
   } // Reset next parameterized shell motion at current time.
 
-  function fire () {
-        // Create the new bullet at the location of the user's avatar.
-        var g = scaleGroupVerticesOriginal(groupInitialize(pspec_pacman), 0.1, 0.1, 0.1);
-        g.label = "bullet";
-        //DB(pacman.locam.x + " " + pacman.locam.y + " " + pacman.locam.z);
-        g.transformBase = matNewTranslate(pacman.locam.x, pacman.locam.y, pacman.locam.z);
-        scene.push(g);
-        var e = new Entity("bullet", [pacman.locam.x, pacman.locam.y, pacman.locam.z], mouseLookX);
-        e.group = g;
-        cannons.push(Body(Trajectory(e, 2, PI10, 20))); // WAS -mouseLoookY loc dir grav ang vel
-        if (socket.readState == socket.OPEN) { socket.send("fire"); }
+
+  // Create the new cannon at the location of the user's avatar.
+  function spawnCannon () {
+        var e = new Entity("cannon", [pacman.locam.x, pacman.locam.y, pacman.locam.z], mouseLookX);
+        var body = Body(Trajectory(e, 2, PI10, 20));
+        var loc = body.tick();
+        var cannon = pcGen("cannon", pcsGen18gon())
+                     .setXform(pgMatrix().scale(1))
+                     .setAni((pc, state) => { // this polygroupCanvas, state current just {:time}
+                       if (loc.z <= 0.0) {
+                         pc.leftMulXform(pgMatrix().trans(loc.x, loc.y, 0.0).rightRotZ(state.time/50));
+                        } else {
+                         loc = body.tick(state.time);
+                         pc.leftMulXform(pgMatrix().trans(loc.x, loc.y, loc.z).rightRotZ(state.time/50));
+                       }});
+        scene.push(cannon);
+
+        if (socket.readyState == socket.OPEN) { socket.send("fire"); }
+  }
+
+  function spawnGhost () {
+    var e = new Entity("ghost", [x, y, 0.5], 4); // BF Entity to be refactored into Actor
+    pc = pcGen("ghost", pcsGenGhost())
+         .setXform(pgMatrix().rotZ(PI180)) // ghost is rotated
+         .setAni((pc, state) => {
+           e.tick(currentTime);
+           pc.leftMulXform(pgMatrix().trans(lscale*e.locam.x, lscale*e.locam.y, 0)
+                                     .rightRotZ((e.diram)/8 * PI360));
+           collision = collision || (distLocLoc(pacman.locam, e.locam) < 0.5) // Detect collision between this ghost and pacman
+         });
+    return pc;
   }
 
   /* Clear the canvas with all black
@@ -1862,53 +1394,52 @@ function Main () {
   */
   for (var y=0; (y < map.length); ++y) {
     for (var x=0; (x < map[0].length); ++x) {
-      var grp;
+      var pc;
       switch (map[y][x]) {
         case 1 : {
-          scene.push(pcGen("floor", pcsGenFloor()).setXform(pgMatrix().trans(x,y,0)))
+          //scene.push(pcGen("floor", pcsGenFloor()).setXform(pgMatrix().trans(x,y,0)))
           break;
         }
-        case 2 : {
-          scene.push(pcGen("floor", pcsGenFloor()).setXform(pgMatrix().trans(x,y,0)))
+        case 2 :
+          //scene.push(pcGen("floor", pcsGenFloor()).setXform(pgMatrix().trans(x,y,0)))
           pc = pcGen("gravel", pcsGenCubeRGB())
-               .setXform(pgMatrix().trans(x,y,0).rightScale(.5).rightTrans(0,0,.5))
-               .setAni( (pc, state) => pc.rightMulXform(pgMatrix().rotZ(state.time/1000)) );
+               .setXform(pgMatrix().trans(x,y,0).rightScale(1).rightTrans(0,0,.5))
+               .setAni( (pc, state) => {
+                 pc.rightMulXform(pgMatrix().rotZ(state.time/1000))
+               });
           scene.push(pc);
           break;
-        }
         case 3 : { // road
           scene.push(pcGen("floor", pcsGenFloor(0.5, "800f", "f00f"))
                      .setXform(pgMatrix().trans(x,y,0)))
           break;
         }
         case 4 : { // special case for car
-          var g = scaleGroupVerticesOriginal(groupInitialize(pspec_pacman), .5, .5, .5);
-          g.transformBase = matNewIdent();
-          scene.push(g);
-          pacman = new Entity("pacman", [x, y, 0.5], 2);
-          pacman.group = g;
+          pacman = pcGen("pacman", pcsGen18gon())
+                   .setXform(pgMatrix().scale(.5))
+                   .setAni((pc, state) => { // this polygroupCanvas, state current just {:time}
+                     pc.leftMulXform(pgMatrix().trans(lscale*pacman.locam.x, lscale*pacman.locam.y, lscale*pacman.locam.z)
+                                               .rightRotZ(-mouseLookX))});
+          scene.push(pacman);
+          pacman = new Entity("pacman", [x, y, 0], 2);
           break;
         }
         case 5 : { // special case for ghost
-          var gg = scaleGroupVerticesOriginal(groupInitialize(pspec_ghost), 1.0, 1.0, 1.0);
-          ghostGroups.push(gg);
-          rotateZ(gg.verticesBase, PI180);
-          scene.push(gg);
-          var ge = new Entity("ghost", [x, y, 0.5], 4);
-          ghostEntities.push(ge);
-          ge.mode = 1;
+          scene.push(spawnGhost());
+          scene.push(pc);
           break;
         }
         case 6 : {
           scene.push(pcGen("iotower", pcsGenPyramidSolid(0.5, "f00f", "800f")).setXform(pgMatrix().trans(x,y,0).rightScale(1,1,100)));
           break;
         }
-        case 7 : { // turrent (the player AKA pacman AKA the cannon/turret)
-          var g = groupInitialize(pspec_pacman);
-          g.transformBase = matNewIdent();
-          matAddTranslate(g.transformBase, lscale*x, lscale*y, .1);
-          g.label="turret";
-          scene.push(g);
+        case 7 : { // turrent (the player AKA pacman AKA the cannon/turret)  For now the fake opponent
+          // Notice no xform is set.  The entire transformation is created each tick.
+          scene.push(
+            pcGen("turret", pcsGen18gon())
+            .setAni( (pc, state) => {
+              pc.leftMulXform(pgMatrix().trans(rem.x/2, rem.y/2, 0).rightRotZ(-rem.d))
+            }));
           break;
         }
         case 8 : {
@@ -1925,105 +1456,64 @@ function Main () {
   } // for y
 
 
-  /* A perimeter of towers
-  */
+  /* A perimeter of towers*/
   for (var a=0; a<5000; a+=8) {
-    var m = matNewIdent();
-    //matAddRotY(m, (Math.pow(2.0,25+rnd(6000)/1000.0)/23000000)*PI1);
-    scene.push(pcGen("dome", pcsGenCubeRainbow()).setXform(pgMatrix().rotZ(a*PI1).rightRotX(a*PI1/90).rightTrans(0, 100, 0).rightScale(5,5,5)));
-  }
-
-  /* Zoom/scale is adjustable
-  */
-  var zoom=400.0
-  function slowZoom (m) {
-    DB.post("zoom", zoom);
-    if (.0001 < abs(m)) {
-      if (m < 0) {
-        zoom -= .05;
-        //mainRenderLoop();
-        setTimeout(function(){slowZoom(m + .1)}, 1);
-      } else if (0 < m) {
-        zoom += .05;
-        //mainRenderLoop();
-        setTimeout(function(){slowZoom(m - .1)}, 1);
-      }
-    }
+    scene.push(pcGen("dome", pcsGenCubeRainbow())
+               .setXform(pgMatrix()
+                         .rotZ(a*PI1)
+                         .rightRotX(a*PI1/90)
+                         .rightTrans(0, 100, 0)
+                         .rightRotY(a*PI1)
+                         .rightScale(5,5,5))
+               .setAni( (pc, state) => {
+                 pc.rightMulXform(pgMatrix()
+                                 .rotZ(currentTime/20*PI1)
+                                 .rightRotY(currentTime/10*PI1)
+                                 .rightRotX(currentTime/10*PI1));
+                                        
+               }));
   }
 
   /* Render Loop -- All the animation occurs in this block
   */
   function mainRenderLoop () {
     var clear = 1;
-    var currentTime = getTime();
     var currentState = {time:currentTime};
     var sortedVisibleScene=[];
+    var pgMatScene;
 
-    /* Tick pacman
-    */
-    //if (gas) { pacman.tick(currentTime); }
+    currentTime = getTime();
+
+    // Tick pacman
     if (gas[0] || gas[1] || gas[2] || gas[3]) {
       pacman.tickInDirection(
         mouseLookX
          + [[PI315,PI0,PI45],[PI270,PI0,PI90],[PI225,PI180,PI135]][gas[0]-gas[1]+1][gas[2]-gas[3]+1], .2); // magnitude
-      //DB.post("mouse", pacman.diram.toFixed(2) + " " + pacman.locam.x.toFixed(2) + " " + pacman.locam.y.toFixed(2) + " " + pacman.locam.z.toFixed(2));
     }
 
-    /* Tick cannons
-    */
-    //DB.post("cannons length", cannons.length)
+    // Tick cannons
     cannons.forEach( (body,idx)=>{
       if (null != body) {
         var loc = body.tick(currentTime);
-        //DB.post("body", loc.x + " " + loc.y + " " + loc.z);
-        var entity = body.entity;
-        var group = entity.group;
-        //console.log(loc);
-        if (entity.label == "pacman") {
+        var pacman = body.entity;
+        if (pacman.label == "pacman") {
           if (loc.z < 0.5) {
             jumping = 0;
             cannons[idx] = null;
-            entity.locam.x = loc.x;
-            entity.locam.y = loc.y;
-            entity.locam.z = 0.5;
+            pacman.locam.x = loc.x;
+            pacman.locam.y = loc.y;
+            pacman.locam.z = 0.5;
           } else {
-            entity.locam.x = loc.x;
-            entity.locam.y = loc.y;
-            entity.locam.z = loc.z;
-          }
-        } else {
-          if (loc.z < 0.0) {
-            group.transformBase = matNewTranslate(loc.x, loc.y, 0.0);
-            cannons[idx] = null;
-           } else {
-            group.transformBase = matNewTranslate(loc.x, loc.y, loc.z);
+            pacman.locam.x = loc.x;
+            pacman.locam.y = loc.y;
+            pacman.locam.z = loc.z;
           }
         }
       }
     });
 
-    /* Tick ghosts
-    */
-    collision = false;
-
-    for (var i=0; i<ghostGroups.length; ++i) {
-      var gg = ghostGroups[i];
-      var ge = ghostEntities[i];
-      ge.tick(currentTime);
-      gg.transformBase = matNewIdent();
-      matAddTranslate (gg.transformBase, lscale*ge.locam.x, lscale*ge.locam.y, 0);
-      matAddRotZ(gg.transformBase, (ge.diram)/8 * PI360);
-      // Detect collision between this ghost and pacman
-      collision = collision || (distLocLoc(pacman.locam, ge.locam) < 0.5)
-    }
-
-    // Camera transformations.  In reverse order since-left multiplied Mat*[vercies]
-    var matScene = matNewIdent()
-    matAddRotX(matScene, mouseLookY);
-    matAddRotZ(matScene, mouseLookX);
-    matAddTranslate(matScene, -pacman.locam.x*lscale, -pacman.locam.y*lscale, -pacman.locam.z*lscale-elevation);
-
     // PG scene transformation matrix NEW
+    // Camera transformations.  In reverse order since-left multiplied Mat*[vercies]
     pgMatScene = pgMatrix()
                  .rotX(mouseLookY)
                  .rightRotZ(mouseLookX)
@@ -2037,70 +1527,26 @@ function Main () {
        visible in a new array.
     */
     for (var g=0; g<scene.length; ++g) {
-      var group = scene[g]    // Old polyon group
+      var pg = scene[g];
       var xform = null;
+      var label = pg.label; // Both share this attribute.
 
-      var pg;                 // New PG object
 
-      var label = group.label; // Both share this attribute.
-
-      if (group.pg) { // NEW scene object is a PCS group.
-        pg = group.reset();
-        pg.tick(currentState);
-        group = null;
-      }
-
-      // Individual transform to apply to current object
-      if (group) {
-        var xform = group.transformBase;
-        if (false !== xform) xform = copyAryAry(xform);
-      }
+      pg.reset().tick(currentState); // NEW where the magic happens to each new object instead of the big if-nest below
 
       /* Transforms and triggers for dynamic objects
       */
       if (label == "pill") {
-        var y=pacman.locfr.y,
-            x=pacman.locfr.x;
-        if (eqpair(pacman.locfr,  pacman.locam) // New tock cycle
-            && mapIsPill(x, y)
-            && x == group.transformBase[0][3]/2
-            && y == group.transformBase[1][3]/2) {
-          map[y][x] = 1.1;
-          doScore(group, 1);
-        }
-        matAddRotZ(xform, currentTime/4000);
-        matAddRotX(xform, currentTime/300);
       }
       else if (label == "power") {
-        var y=pacman.locfr.y,
-            x=pacman.locfr.x;
-        if (eqpair(pacman.locfr,  pacman.locam) // New tock cycle
-            && mapWithin(x,y)
-            && map[y][x]==2
-            && x == group.transformBase[0][3]/2
-            && y == group.transformBase[1][3]/2) {
-          map[y][x] = 1.1;
-          doScore(group, 100);
-        }
-        matAddScale(xform, 2+.2*sin(currentTime/200), 2+.2*sin(currentTime/220), 2+.2*sin(currentTime/230));
       }
       else if (label == "ghost") {
-        //matAddTranslate (xform, 0, 0, .1+.1*sin(currentTime/200));
       }
       else if (label == "pacman") {
-        matAddTranslate (xform, lscale*pacman.locam.x, lscale*pacman.locam.y, lscale*pacman.locam.z);
-        matAddRotZ(xform, (pacman.diram)/8 * PI360);
       }
       else if (label == "turret") {
-        //matAddRotY(xform, mouseLookX/100.0);
-        //matAddRotX(xform, mouseLookY/100.0);
-        xform = matNewRotZ(rem.d);
-        matAddTranslateR(rem.x/2, rem.y/2, 0, xform);
       } else if (label == "gravel") {
       } else if (label == "dome") {
-          //matAddRotX(xform, currentTime/10*PI1);
-          //matAddRotY(xform, currentTime/10*PI1);
-          //matAddRotZR(currentTime/20*PI1, xform);
       } else if (label == "maze") {
         //var j = group.verticesBase[0][0];
         //xform = matNewScale(1.0, 1.0, 1.0+sin((j/10+currentTime/1000)*PI90));
@@ -2109,40 +1555,22 @@ function Main () {
         //xform = matNewScale(1.0, 1.0, 1.0+sin((-j/5+currentTime/1000)*PI90));
       }
 
-      if (group) {
-        if (xform) {
-          // Combine the individual transform with the camera's transform
-          matMultMatMat(matScene, xform);
-          group.transform = xform;
-        } else {
-          // Static object just gets the camera transform
-          group.transform = matScene;
-        }
-      } else {
-        pg.leftMulXform(pgMatScene).rightMulXform(xform); // Apply camera transform to the initial pg object.
-      }
+      // Combine the individual transform with the camera's transform
+      // Static object just gets the camera transform
+      pg.leftMulXform(pgMatScene).rightMulXform(xform);
 
       // Transform just the center vertex for now
-      if (group) {
-        groupTransformMatVertexCenter(group.transform, group);
-      } else {
-        pg.xformCenter();
-      }
+      pg.xformCenter();
 
       // Keep track of the groups whos center is in front of camera
-      if (group) {
-        if (!perspective(group.vertexCenter, 400)) sortedVisibleScene.push(group);
-      } else {
-        if (!pgPerspective(pg.getCenter(), 400)) {
-          sortedVisibleScene.push(pg);
-       }
+      if (!pgPerspective(pg.getCenter(), 400)) {
+        sortedVisibleScene.push(pg);
       }
 
     } // for scene.length
 
     /* Sort the new group of potentially visible groups
     */
-    myz = sortedVisibleScene;
     sortedVisibleScene.sort(function (a,b) {
       if (a.pg && b.pg) {
         return b.getCenter()[1] - a.getCenter()[1];
@@ -2158,143 +1586,79 @@ function Main () {
     /* Transform and plot each object
     */
      for (var g=0; g < sortedVisibleScene.length; ++g) {
-       var group = sortedVisibleScene[g];
+       var pg = sortedVisibleScene[g];
+       var group = null;
 
-       if (group.pg) {
-         pg = group;
-         group = null;
-       }
+       pg.xformPoints()
 
-       if (group && group.invisible) continue;
-
-       if (group) {
-         groupTransformMatVerticesOriginal(group.transform, group);
-       } else {
-         pg.xformPoints()
-         //pg.dump();
-       }
-
-       if (group) {
-         if (perspective(group.vertices, 400)) continue;
-       } else {
-         if (pgPerspective(pg.getPoints(), 400)) continue;
-       }
+       if (pgPerspective(pg.getPoints(), 400)) continue;
 
        // Need to stretch along y-axis so normal calculations are more sane
-       if (group) {
-         scale(group.vertices, 1, 50, 1);
-       } else {
-         //pgScale(pg.getPoints(), 1, 50, 1);
-       }
+       pgScale(pg.getPoints(), 1, 200, 1);
 
-       if (group) for (var f=0; f<group.faces.length; ++f) {
-         var gvertices = group.vertices;
-         var face = group.faces[f];
-         var indices = face.indices;
-         var gv0 = gvertices[indices[0]]; // Consider first three vector for normal calculations
-         var gv1 = gvertices[indices[1]];
-         var gv2 = gvertices[indices[2]];
-         var theNormal = getNormal(gv2, gv1, gv0);
-         var v;
+       var faces = pg.getFaces();
+       var points = pg.getPoints();
+       for (var f=0; f<faces.length; ++f) {
+         var face = faces[f];
+         var indices = face.face;
+         var i0 = indices[0]*4;
+         var i1 = indices[1]*4;
+         var i2 = indices[2]*4;
 
-         if (theNormal[1] > 0) {
-           // Begin drawing the initial and next two cached points (x, z)
-           context.beginPath();
-           context.moveTo(gv0[0], -gv0[2]);
-           context.lineTo(gv1[0], -gv1[2]);
-           context.lineTo(gv2[0], -gv2[2]);
+         var v0 = points.slice(i0,i0+3)
+         var v1 = points.slice(i1,i1+3)
+         var v2 = points.slice(i2,i2+3)
 
-           // Draw the rest of the points
-           for (var i=3; i<indices.length; ++i) {
-             v = gvertices[indices[i]];
-             context.lineTo(v[0], -v[2]);
-           }
+         var theNormal = getNormal(v2, v1, v0);
+         if (theNormal[1] <=0) { continue; }
 
-           // Render filled area
-           var nx = theNormal[0];
-           var ny = theNormal[1];
-           var nz = theNormal[2];
-           var r = Math.sqrt(nz*nz + ny*ny + nx*nx);
-           // Normalize the normal
-           //nz = nz / r;
-           ny = ny / r;
-           //nx = nx / r;
+         context.beginPath()
+         context.moveTo(v0[0], -v0[2]);
+         context.lineTo(v1[0], -v1[2]);
+         context.lineTo(v2[0], -v2[2]);
 
-           var fillStyle = "rgba(" + ((ny * face.colorFill.r) | 0) + "," + // x.round == x|0
-                                     ((ny * face.colorFill.g) | 0) + "," +
-                                     ((ny * face.colorFill.b) | 0) + "," +
-                                     (face.colorFill.a) + ")";
-
-           // Clear view port before the first polygon is rendered to avoid flickering
-           if (clear) { clearContext();  clear = 0; }
-
-           context.fillStyle = fillStyle;
-           context.fill();
-
-           // Outline the faces
-
-           context.closePath();
-           context.strokeStyle = face.colorEdgeStr;
-           context.lineWidth = "1"; // Adjust outline width thicker when closer to camera.
-           context.stroke();
-
-         } // if theNormal > 0
-       } // for faces.group.length
-       else {
-         var faces = pg.getFaces();
-         var points = pg.getPoints();
-         for (var f=0; f<faces.length; ++f) {
-           var face = faces[f];
-           var indices = face.face;
-           var i0 = indices[0]*4;
-           var i1 = indices[1]*4;
-           var i2 = indices[2]*4;
-
-           var v0 = points.slice(i0,i0+3)
-           var v1 = points.slice(i1,i1+3)
-           var v2 = points.slice(i2,i2+3)
-
-           if (getNormal(v2, v1, v0)[1] <=0) { continue; }
-
-           context.beginPath()
-           context.moveTo(v0[0], -v0[2]);
-           context.lineTo(v1[0], -v1[2]);
-           context.lineTo(v2[0], -v2[2]);
-
-           // Draw the rest of the points
-           for (var i=3; i<indices.length; ++i) {
-             i0 = indices[i]*4;
-             v0 = points.slice(i0,i0+3);
-             context.lineTo(v0[0], -v0[2]);
-           }
-
-           var ny=1;
-           var fillStyle = "rgba(" + ((ny * face.fill.r) | 0) + "," + // x.round == x|0
-                                     ((ny * face.fill.g) | 0) + "," +
-                                     ((ny * face.fill.b) | 0) + "," +
-                                     (face.fill.a) + ")";
-
-           if (clear) { clearContext();  clear = 0; }
-
-           context.fillStyle = fillStyle;
-           context.fill();
-
-           // Outline the faces
-
-           context.closePath();
-           context.strokeStyle = face.edgeStr;
-           context.lineWidth = "1"; // Adjust outline width thicker when closer to camera.
-           context.stroke();
-
+         // Draw the rest of the points
+         for (var i=3; i<indices.length; ++i) {
+           i0 = indices[i]*4;
+           v0 = points.slice(i0,i0+3);
+           context.lineTo(v0[0], -v0[2]);
          }
-       }
+
+         // Render filled area
+         var nx = theNormal[0];
+         var ny = theNormal[1];
+         var nz = theNormal[2];
+         var r = Math.sqrt(nz*nz + ny*ny + nx*nx);
+         // Normalize the normal
+         //nz = nz / r;
+         ny = ny / r;
+         //nx = nx / r;
+
+         var fillStyle ="rgba(" + ((ny * face.fill.r) | 0) + "," + // x.round == x|0
+                                  ((ny * face.fill.g) | 0) + "," +
+                                  ((ny * face.fill.b) | 0) + "," +
+                                  (face.fill.a) + ")";
+
+         if (clear) { clearContext();  clear = 0; }
+
+         context.fillStyle = fillStyle;
+         context.fill();
+
+         // Outline the faces
+
+         context.closePath();
+         context.strokeStyle = face.edgeStr;
+         context.lineWidth = "1"; // Adjust outline width thicker when closer to camera.
+         context.stroke();
+
+       } // for faces.length
      } // for sortedVisibleScene.length
 
     // Frame rate
     ++frameCount;
     if (frameRateTime+1000 <= currentTime) {
       frameRate = 1000*frameCount/(currentTime - frameRateTime);
-      frameRateTime = getTime();
+      frameRateTime = currentTime;
       frameCount=0;
     }
 
@@ -2311,7 +1675,6 @@ function Main () {
       //context.fillText("go  "+pacman.dirgo,-width/2, -height/2+120);
     }
 
-    // BF: TODO
     // Update server of my wareabouts.
     if (socket.readyState && (last.d != mouseLookX || last.x != pacman.locam.x || last.y != pacman.locam.y)) {
         //var b = Uint8Array.alloc(1+1+8+8+8);
@@ -2327,63 +1690,17 @@ function Main () {
         db.setFloat32(6, last.x);
         db.setFloat32(10, last.y);
         //DB("sending" + buff.byteLength + " bytes.");
-        if (socket.readState == socket.OPEN) { socket.send(buff); }
+        if (socket.readyState == socket.OPEN) { socket.send(buff); }
     }
 
+    collision = false;
 
     if (!quit) setTimeout(function(){mainRenderLoop()}, 10);
     else DB ("done.");
 
   } // mainRenderLoop()
 
-  var doScore = function (group, pts) {
-    var pill = new Entity("pill", [0, 0, 0], 0);
-    pill.locticker.reset(getTime(), 5000);
-    pill.locbe.z += 5;
-
-    scores.add(score+=pts);
-
-    // Slowly scale the group down to nothingness then set invisible.
-    var pillthread = function () {
-      pill.tick(getTime());
-      lgz = pill.locam.z;
-      //matAddTranslate(group.transformBase, 0, 0, 2);
-      //group.transformBase[2][3] = lgz;
-      matAddScale(group.transformBase, .92, .92, .92);
-      if (pill.locam.z != pill.locbe.z) {
-        setTimeout(function(){pillthread()}, 100);
-      } else {
-        group.invisible = true;
-      }
-    }
-    pillthread();
-  }
-
-/*
-  var globalMouse = false;
-  window.onmousedown = function (event) {
-    globalMouse = event.which;
-    // Mouse click on screen will move the mouse as well
-    pacman.turnByDelta(
-      event.clientX < width/3   ? 2 :
-      width*2/3 < event.clientX ? 6 : 4);
-  }
-
-  window.onmouseup = function () { globalMouse = false; }
-*/
-
-  // Rotate scene based on mouse movement event
-  //window.mycanvas.onmousemove = function () {
-  //  if (mouseActive && globalMouse == 1) {
-  //    var x = event.clientX;
-  //    var y = event.clientY;
-  //    mouseRotX = (x-width/2)/99;
-  //    mouseRotY = (height/2-y)/99;
-  //  }
-  //}
-
   var flagShift = false;
-
   var Button_shift = 16;
   var Button_esc = 27;
   var Button_left = 37;
@@ -2437,7 +1754,7 @@ function Main () {
   var enterPointerLock = function () {
     mouseControlsLook();
     document.body.onclick = function (e) {
-      if (e.button == 0) { fire(); }
+      if (e.button == 0) { spawnCannon(); }
       if (e.button == 2) { jump(); }
     }
     //gas = 1; // Start motion
@@ -2470,15 +1787,6 @@ function Main () {
     //DB.post("key"+b, "down");
     switch (b) {
       case Button_shift : flagShift=true; break;
-      //case Button_i : if (flagShift) { pacman.walkInDirection(0); break; }
-      //case Button_up :    pacman.turnByDelta(0); break;
-      //case Button_k : if (flagShift) { pacman.walkInDirection(4); break; }
-      //case Button_down :  pacman.turnByDelta(4); break;
-      //case Button_j : if (flagShift) { pacman.walkInDirection(2); break; }
-      //case Button_left:   pacman.turnByDelta(.2); break;
-      //case Button_l : if (flagShift) { pacman.walkInDirection(6); break; }
-      //case Button_right : pacman.turnByDelta(7.8); break;
-      //case Button_g :     gasToggle(); break;
       case Button_h :     hudToggle(); break;
       case Button_space : jump(); break;
       case Button_q :     quitToggle(); break;
@@ -2492,9 +1800,6 @@ function Main () {
       case Button_d :     gasWalkWest(1); break;
       case Button_equals :  heightAdd(1); break;
       case Button_minus : heightAdd(-1); break;
-      case Button_bracketOpen : slowZoom(-100); break;
-      case Button_bracketClose : slowZoom(100); break;
-      case Button_m : mouseActive = !mouseActive;
     }
   }
 
@@ -2519,6 +1824,7 @@ function Main () {
 
 
 window.onload = function () { Main(); }
+
 var socket = new WebSocket('ws://world.dv8.org:7199')
 socket.binaryType = "arraybuffer";
 
@@ -2543,6 +1849,7 @@ socket.onmessage = function (event) {
     switch (cmd)  {
     case 0:                      // My new user ID from the server.
       // Create my entity / turret object.
+      break;
     case 1:                      // User moved and/or rotated.  If new user, create him.
       rem.d = dv.getFloat32(2);
       rem.x = dv.getFloat32(6);
@@ -2556,30 +1863,4 @@ socket.onmessage = function (event) {
 }
 
 
-/*
-isNaN
-typeof (blah)
-9..constructor == Number
-*/
-
 </script></html>
-<!---
-  Debug_console_window
-  Unit_testing_infrastructure
-  Global_alises_and_functions
-  Ticker_class
-  Entity_class
-  The_map
-  The_models
-  Face_object
-  Group_object
-  Vertex_transforms
-  Matrix_library
-  Main
-
-  TODO:
-   Concave Polygon
-   {name:"cube",
-    vertices:[[x,y,z],...],
-    faces:[
--->
