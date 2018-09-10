@@ -165,20 +165,15 @@ var square = function (x) {return x*x;}
 var getTime = function () { return (new Date).getTime(); }
 var eqpair = function (a, b) {return a.x==b.x && a.y==b.y;}
 var setLoc = function (a, b) {a.x=b.x;  a.y=b.y;  a.z=b.z;}
-function copyAryAry (a) {
-  var i, b = a.slice(0);
-  for (i=0; i<b.length; ++i) b[i] = b[i].slice(0);
-  return b;
-}
 Array.prototype.groupby = function (l) { // Group a vector into length l sub vectors.
   return this.reduce( (r,v,i,a) => (i%l || r.push(a.slice(i,i+l)), r), []);
 };
 
-Array.prototype.tomap = function () { // Transmogrify an array into a map.
+Array.prototype.tomap = function () { // Transmogrify an array into a map.  Used to pretty print an array.
   return this.reduce( (r,v,i) => (r[i]=v, r), {})
 }
 
-Object.prototype.stringify = function () { // Transmogrify everything into a map.
+Object.prototype.stringify = function () {
   return JSON.stringify(this);
 }
 
@@ -243,10 +238,9 @@ function Ticker () {
 
   Usage::
 **************************************************************/
-function Body (pf, timeMSInitial) { // parameterized function
-  var time0 = timeMSInitial || getTime();
-  self = function (time) {
-    return pf(((time || getTime()) - time0)/1000.0);
+function Body (pf, start=getTime()) { // parameterized function
+  self = function (time=getTime()) {
+    return pf((time - start)/1000.0);
   };
   self.tick = self;
   self.entity = pf.entity;
@@ -857,50 +851,59 @@ function getNormal (v0, v1, v2) {
 
 
 /***************************************
-
+  Extend the Array object into a transformation matrix.
   PG_Matrix_library
   * Pretty sure you'd only want to scale first if the model is defined around the origin.
 
 ***************************************/
-function pgMatrix() {
-  var mat=[];
+const pgMatrix = (() => {
 
-  mat.scale = function (x, y, z) {
+  Array.prototype.scale = function (x, y, z) {
     var x = arguments.length < 1 ? 1 : x;
     var y = arguments.length < 2 ? x : y;
     var z = arguments.length < 3 ? y : z;
-    mat.push(...[x,0,0,0, 0,y,0,0, 0,0,z,0, 0,0,0,1]);
-    return mat;
-  }
-  mat.trans = function (x, y, z) {
-    mat.push(...[1,0,0,x, 0,1,0,y, 0,0,1,z, 0,0,0,1]);
-    return mat;
+    this.push(...[x,0,0,0, 0,y,0,0, 0,0,z,0, 0,0,0,1]);
+    return this;
   }
 
-  mat.rightScale = function (xx, yy, zz) {
+  /* abcd   x000   ax by cz d
+     efgh * 0y00 = ex fy gz h  
+     ijkl   00z0   ix jy kz l
+     mnop   0001   mx ny oz p */
+  Array.prototype.rightScale = function (xx, yy, zz) {
     var x = arguments.length < 1 ? 1 : xx;
     var y = arguments.length < 2 ? x : yy;
     var z = arguments.length < 3 ? y : zz;
-    mat[0] *= x;  mat[1] *= y;  mat[2] *= z;
-    mat[4] *= x;  mat[5] *= y;  mat[6] *= z;
-    mat[8] *= x;  mat[9] *= y;  mat[10]*= z;
-    mat[12]*= x;  mat[13]*= y;  mat[14]*= z;
-    return mat;
+    this[0] *= x;  this[1] *= y;  this[2] *= z;
+    this[4] *= x;  this[5] *= y;  this[6] *= z;
+    this[8] *= x;  this[9] *= y;  this[10]*= z;
+    this[12]*= x;  this[13]*= y;  this[14]*= z;
+    return this;
   }
 
-  mat.rightTrans = function (x, y, z) {
-    mat[ 3] += mat[ 0]*x + mat[ 1]*y + mat[ 2]*z;
-    mat[ 7] += mat[ 4]*x + mat[ 5]*y + mat[ 6]*z;
-    mat[11] += mat[ 8]*x + mat[ 9]*y + mat[10]*z;
-    mat[15] += mat[12]*x + mat[13]*y + mat[14]*z;
-    return mat
+  /* Mutate a transformation matrix with a post translation.
+     abcd   100x   a  b  c   ax+by+cz+d
+     efgh * 010y = e  f  g   ex+fy+gz+h
+     ijkl   001z   i  j  k   ix+jy+kz+l
+     mnop   0001   m  n  o   mx+ny+oz+p */
+  Array.prototype.trans = function (x, y, z) {
+    this.push(...[1,0,0,x, 0,1,0,y, 0,0,1,z, 0,0,0,1]);
+    return this;
+  }
+
+  Array.prototype.rightTrans = function (x, y, z) {
+    this[ 3] += this[ 0]*x + this[ 1]*y + this[ 2]*z;
+    this[ 7] += this[ 4]*x + this[ 5]*y + this[ 6]*z;
+    this[11] += this[ 8]*x + this[ 9]*y + this[10]*z;
+    this[15] += this[12]*x + this[13]*y + this[14]*z;
+    return this
   }
     
-  mat.rotY = function (ang) {
+  Array.prototype.rotY = function (ang) {
     var c = cos(ang);
     var s = sin(ang);
-    mat.push(...[c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);
-    return mat;
+    this.push(...[c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);
+    return this;
   }
 
   /*
@@ -908,200 +911,58 @@ function pgMatrix() {
    efgh * 0100 = ec+gS  f  es+gc  h
    ijkl   S0c0   ic+kS  j  is+kc  l
    mnop   0001   mc+oS  n  ms+oc  p*/
-  mat.rightRotY = function (ang) {
-    var i, a, b, c = cos(ang), s = sin(ang);
-    for (i=0; i<4; ++i) {
-      a=mat[i*4+0];  b=mat[i*4+2];
-      mat[i*4+0] =  c*a + s*b;
-      mat[i*4+2] = -s*a + c*b;
-    }
-    return mat;
+  Array.prototype.rightRotY = function (ang) {
+    var a, b, c = cos(ang), s = sin(ang);
+    a=this[ 0];  b=this[ 2];  this[ 0] = c*a + s*b;  this[ 2] = -s*a + c*b;
+    a=this[ 4];  b=this[ 6];  this[ 4] = c*a + s*b;  this[ 6] = -s*a + c*b;
+    a=this[ 8];  b=this[10];  this[ 8] = c*a + s*b;  this[10] = -s*a + c*b;
+    a=this[12];  b=this[14];  this[12] = c*a + s*b;  this[14] = -s*a + c*b;
+    return this;
   }
 
-
-  mat.rotX = function (ang) {
+  Array.prototype.rotX = function (ang) {
     var c = cos(ang);
     var s = sin(ang);
-    mat.push(...[1,0,0,0, 0,c,-s,0, 0,s,c,0, 0,0,0,1]);
-    return mat;
+    this.push(...[1,0,0,0, 0,c,-s,0, 0,s,c,0, 0,0,0,1]);
+    return this;
   }
 
   /* abcd   1000   q bc+cs  bS+cc d
      efgh * 0cS0 = e fc+gs  fS+gc h
      ijkl   0sc0   i jc+ks  jS+kc l
      mnop   0001   m nc+os  nS+oc p */
-  mat.rightRotX = function (ang) {
-    var i, a, b, c = cos(ang), s = sin(ang);
-    for (i=0; i<4; ++i) {
-      a=mat[i*4+1];  b=mat[i*4+2];
-      mat[i*4+1] =  c*a + s*b;
-      mat[i*4+2] = -s*a + c*b;
-    }
-    return mat;
+  Array.prototype.rightRotX = function (ang) {
+    var a, b, c = cos(ang), s = sin(ang);
+    a=this[ 1];  b=this[ 2];  this[ 1] = c*a + s*b;  this[ 2] = -s*a + c*b;
+    a=this[ 5];  b=this[ 6];  this[ 5] = c*a + s*b;  this[ 6] = -s*a + c*b;
+    a=this[ 9];  b=this[10];  this[ 9] = c*a + s*b;  this[10] = -s*a + c*b;
+    a=this[13];  b=this[14];  this[13] = c*a + s*b;  this[14] = -s*a + c*b;
+    return this;
   }
 
-  mat.rotZ = function (ang) {
+  Array.prototype.rotZ = function (ang) {
     var c = cos(ang);
     var s = sin(ang);
-    mat.push(...[c,-s,0,0, s,c,0,0, 0,0,1,0, 0,0,0,1]);
-    return mat;
+    this.push(...[c,-s,0,0, s,c,0,0, 0,0,1,0, 0,0,0,1]);
+    return this;
   }
 
-  /* abcd   cS00   ac+bs -as+bc c d
-     efgh * sc00 = ec+fs -es+fc g h
-     ijkl   0010   ic+js -is+jc k l
-     mnop   0001   mc+ns -ms+nc o p */
-  mat.rightRotZ = function (ang) {
+  /* abcd   cS00   ac+bs aS+bc c d
+     efgh * sc00 = ec+fs eS+fc g h
+     ijkl   0010   ic+js iS+jc k l
+     mnop   0001   mc+ns mS+nc o p */
+  Array.prototype.rightRotZ = function (ang) {
     var i, a, b, c = cos(ang), s = sin(ang);
-    for (i=0; i<4; ++i) {
-      a=mat[i*4+0];  b=mat[i*4+1];
-      mat[i*4+0] =  c*a + s*b;
-      mat[i*4+1] = -s*a + c*b;
-    }
-    return mat;
+    a=this[ 0];  b=this[ 1];  this[ 0] =  c*a + s*b;  this[ 1] = -s*a + c*b;
+    a=this[ 4];  b=this[ 5];  this[ 4] =  c*a + s*b;  this[ 5] = -s*a + c*b;
+    a=this[ 8];  b=this[ 9];  this[ 8] =  c*a + s*b;  this[ 9] = -s*a + c*b;
+    a=this[12];  b=this[13];  this[12] =  c*a + s*b;  this[13] = -s*a + c*b;
+    return this;
   }
 
-  return mat;
-}
+  return () => [];
+})() // pgMatrix 
 
-
-/*
-   Mutate a transformation matrix with a post translation.
-
-   12 multiplies
-   12 additions
-   16 reads
-    4 writes
-
-   abcd   100x   a  b  c   ax+by+cz+d
-   efgh * 010y = e  f  g   ex+fy+gz+h
-   ijkl   001z   i  j  k   ix+jy+kz+l
-   mnop   0001   m  n  o   mx+ny+oz+p
-*/
-function matAddTranslate (mat, x, y, z) {
-  var i, row;
-  for (i=0; i<4; ++i) {
-    row=mat[i];
-    row[3] +=  row[0]*x + row[1]*y + row[2]*z;
-  }
-  mat
-}
-
-
-/* abcd   x000   ax by cz d
-   efgh * 0y00 = ex fy gz h  
-   ijkl   00z0   ix jy kz l
-   mnop   0001   mx ny oz p */
-function pgMulRightScale (mat, x, y, z) {
-  mat[ 0] *= x;  mat[ 1] *= y;  mat[ 2] *= z;
-  mat[ 4] *= x;  mat[ 5] *= y;  mat[ 6] *= z;
-  mat[ 8] *= x;  mat[ 9] *= y;  mat[10] *= z;
-  mat[12] *= x;  mat[13] *= y;  mat[14] *= z;
-  return mat;
-}
-
-/* Mutate a transformation matrix with a pre translation.
-   100x   abcd   a+xm  b+xn  c+xo  d+xp
-   010y * efgh = e+ym  f+yn  g+yo  h+yp
-   001z   ijkl   i+zm  j+zn  k+zo  l+zp
-   0001   mnop   m     n     o     p
-*/
-function matAddTranslateR (x, y, z, mat) {
-  var i, row, m, n, o, p;
-  row = mat[3];
-  m=row[0];  n=row[1];  o=row[2];  p=row[3];
-
-  row = mat[0];
-  row[0]+=x*m;  row[1]+=x*n;  row[2]+=x*o;  row[3]+=x*p;
-
-  row = mat[1];
-  row[0]+=y*m;  row[1]+=y*n;  row[2]+=y*o;  row[3]+=y*p;
-
-  row = mat[2];
-  row[0]+=z*m;  row[1]+=z*n;  row[2]+=z*o;  row[3]+=z*p;
-}
-
-/*
-   Mutate a transformation matrix with a post rotation about the Z axis
-
-   16 multiplies
-    8 additions
-    8 reads
-    8 writes
-
-   x=cos(ang)  y=-sin(ang) z=sin(ang)
-
-   abcd   xy00   ax+bz  ay+bx c d
-   efgh * zx00 = ex+fz  ey+fx g h
-   ijkl   0010   ix+jz  iy+jx k l
-   mnop   0001   mx+nz  my+nx o p
-*/
-function matAddRotZ (mat, ang) {
-  var i, a, b, row;
-  var cosa = cos(ang);
-  var sina = sin(ang);
-
-  for (i=0; i<4; ++i) {
-    row=mat[i];  a=row[0];  b=row[1];
-    row[0] =  cosa*a + sina*b;
-    row[1] = -sina*a + cosa*b;
-  }
-}
-
-/*
-   Mutate a transformation matrix with a pre rotation about the Z axis
-
-   16 multiplies
-    8 additions
-    8 reads
-    8 writes
-
-   x=cos(ang)  y=-sin(ang) z=sin(ang)
-
-   xy00   abcd   xa+ye  xb+yf  xc+yg  xd+yh
-   zx00 * efgh = za+xe  zb+xf  zc+xg  zd+xh
-   0010   ijkl       i      j      k      l
-   0001   mnop       m      n      o      p
-*/
-function matAddRotZR (ang, mat) {
-  var row0, row1, a, b, c, d, e, f, g, h;
-  var cosa = cos(ang);
-  var sina = sin(ang);
-  row0 = mat[0];
-  row1 = mat[1];
-
-  a=row0[0];  b=row0[1];  c=row0[2];  d=row0[3];
-  e=row1[0];  f=row1[1];  g=row1[2];  h=row1[3];
-
-  row0[0] = cosa*a + -sina*e;
-  row0[1] = cosa*b + -sina*f;
-  row0[2] = cosa*c + -sina*g;
-  row0[3] = cosa*d + -sina*h;
-
-  row1[0] = sina*a + cosa*e;
-  row1[1] = sina*b + cosa*f;
-  row1[2] = sina*c + cosa*g;
-  row1[3] = sina*d + cosa*h;
-}
-
-
-function matAddPerspective (mat, per) {
-/*
-  abcd            [x   [(x*per)/y
-  efgh *   ?   *   y    y
-  ijkl             z    (z*per)/y
-  mnop             1]   ?]
-*/
-  for (i=0; i<vectors.length; ++i) { // Over every vector
-    var v = vectors[i]; // Consider vector
-    var x = v[0];
-    var y = v[1];
-    var z = v[2];
-    var p = per / y;
-    v[0] = x * p;
-    v[2] = z * p;
-  }
-}
 
 
 /* Left multiply a transformation matrix with a list of vectors.  Both are linear arrays.
@@ -1281,11 +1142,10 @@ var last = {};
 var rem = {};
 var mouseLookX = PI0;
 var mouseLookY = PI0;
-var pacman2;
-var pacman;
+var pacman = null;
 var quit = false;
-
-  var scene = []; // Simple array of renderable object groups.
+var currentTime = getTime();
+var scene = []; // Simple array of renderable object groups.
 
 /***************************************
   Main
@@ -1300,16 +1160,14 @@ function Main () {
   var lscale = 1; // Scale all object coordinates by this
   var hud = true;
   var gas = [0,0,0,0]; // Literally the gas pedal in the North South East West directions
-  var jumping = 0;
   var mouseRotX=0, mouseRotY=0;
-  var elevation = .2;
+  var elevation = 2;
   var collision = false;
   var score=0;
   var frameRateTime=getTime();
   var frameCount=0;
   var frameRate=0;
-  var cannons = [];
-  var currentTime = getTime();
+  var jumper = null;
 
   context.translate(width/2, height/2); // Set canvas's origin to center
   function quitToggle () { DB("QUIT"); quit ^= 1; }
@@ -1319,10 +1177,10 @@ function Main () {
   function gasWalkEast(v)  { gas[2] = v; }
   function gasWalkWest(v)  { gas[3] = v; }
   function heightAdd (x) { elevation += x;  /*if (elevation < 0) elevation = 0;*/ if (400 < 400) elevation = 400; }
+
   function jump () {
-    if (jumping) return;
-    jumping = 1;
-    cannons.push(Body(Trajectory(pacman, 15, PI80, 60))); // grav ang vel
+    if (jumper) return;
+    jumper = Body(Trajectory(pacman, 15, PI80, 60)); // grav ang vel
   } // Reset next parameterized shell motion at current time.
 
 
@@ -1414,7 +1272,7 @@ function Main () {
                      .setXform(pgMatrix().trans(x,y,0)))
           break;
         }
-        case 4 : { // special case for car
+        case 4 : { // special case for user's avatar
           pacman = pcGen("pacman", pcsGen18gon())
                    .setXform(pgMatrix().scale(.5))
                    .setAni((pc, state) => { // this polygroupCanvas, state current just {:time}
@@ -1491,29 +1349,20 @@ function Main () {
          + [[PI315,PI0,PI45],[PI270,PI0,PI90],[PI225,PI180,PI135]][gas[0]-gas[1]+1][gas[2]-gas[3]+1], .2); // magnitude
     }
 
-    // Tick cannons
-    cannons.forEach( (body,idx)=>{
-      if (null != body) {
-        var loc = body.tick(currentTime);
-        var pacman = body.entity;
-        if (pacman.label == "pacman") {
-          if (loc.z < 0.5) {
-            jumping = 0;
-            cannons[idx] = null;
-            pacman.locam.x = loc.x;
-            pacman.locam.y = loc.y;
-            pacman.locam.z = 0.5;
-          } else {
-            pacman.locam.x = loc.x;
-            pacman.locam.y = loc.y;
-            pacman.locam.z = loc.z;
-          }
-        }
+    // Tick user's avatar jumper Avatar
+    if (jumper) {
+      let loc = jumper.tick(currentTime);
+      let pacman = jumper.entity;
+      pacman.locam.x = loc.x;
+      pacman.locam.y = loc.y;
+      pacman.locam.z = loc.z;
+      if (loc.z < 0.5) {
+        jumper = null;
+        pacman.locam.z = 0.5;
       }
-    });
+    }
 
-    // PG scene transformation matrix NEW
-    // Camera transformations.  In reverse order since-left multiplied Mat*[vercies]
+    // Camera transformation matrix.  In reverse order since-left multiplied Mat*[vercies]
     pgMatScene = pgMatrix()
                  .rotX(mouseLookY)
                  .rightRotZ(mouseLookX)
@@ -1521,138 +1370,79 @@ function Main () {
                              -pacman.locam.y*lscale,
                              -pacman.locam.z*lscale-elevation);
 
-    /* Create a new transformation matrix for every group in scene based on a copy
-       of the base transformation matrix.  Apply the resulting transform on each
-       object's center vertex to determine potential visibility and keep track of
-       visible in a new array.
-    */
-    for (var g=0; g<scene.length; ++g) {
-      var pg = scene[g];
-      var xform = null;
-      var label = pg.label; // Both share this attribute.
-
-
-      pg.reset().tick(currentState); // NEW where the magic happens to each new object instead of the big if-nest below
-
-      /* Transforms and triggers for dynamic objects
-      */
-      if (label == "pill") {
-      }
-      else if (label == "power") {
-      }
-      else if (label == "ghost") {
-      }
-      else if (label == "pacman") {
-      }
-      else if (label == "turret") {
-      } else if (label == "gravel") {
-      } else if (label == "dome") {
-      } else if (label == "maze") {
-        //var j = group.verticesBase[0][0];
-        //xform = matNewScale(1.0, 1.0, 1.0+sin((j/10+currentTime/1000)*PI90));
-      } else if (label == "wall") {
-        //var j = group.verticesBase[0][0];
-        //xform = matNewScale(1.0, 1.0, 1.0+sin((-j/5+currentTime/1000)*PI90));
-      }
-
-      // Combine the individual transform with the camera's transform
-      // Static object just gets the camera transform
-      pg.leftMulXform(pgMatScene).rightMulXform(xform);
-
-      // Transform just the center vertex for now
-      pg.xformCenter();
-
-      // Keep track of the groups whos center is in front of camera
-      if (!pgPerspective(pg.getCenter(), 400)) {
+    /* Reset and 'tick' each object.  Combine camera xform with object and apply to the center point.
+    those objects with center point in fron tof camera go on to the renering phase. */
+    scene.forEach ( (pg) => {
+      pg.reset()
+        .tick(currentState)
+        .leftMulXform(pgMatScene) // Combine the individual transform with the camera's transform
+        .xformCenter(); // Transform just the center vertex for now
+      if (!pgPerspective(pg.getCenter(), 400)) { // Collect groups in front of camera
         sortedVisibleScene.push(pg);
-      }
-
-    } // for scene.length
-
-    /* Sort the new group of potentially visible groups
-    */
-    sortedVisibleScene.sort(function (a,b) {
-      if (a.pg && b.pg) {
-        return b.getCenter()[1] - a.getCenter()[1];
-      } else if (a.pg) {
-        return b.vertexCenter[0][1] - a.getCenter()[1];
-      } else if (b.pg) {
-        return b.getCenter()[1] - a.vertexCenter[0][1];
-      } else {
-        return b.vertexCenter[0][1] - a.vertexCenter[0][1];
       }
     });
 
+    // Sort the new group of potentially visible groups
+    sortedVisibleScene.sort((a,b) => b.getCenter()[1] - a.getCenter()[1]);
+
     /* Transform and plot each object
     */
-     for (var g=0; g < sortedVisibleScene.length; ++g) {
-       var pg = sortedVisibleScene[g];
-       var group = null;
+    sortedVisibleScene.forEach ( (pg) => {
+      pg.xformPoints()
+      if (pgPerspective(pg.getPoints(), 400)) return; // skips if any point is behind camera
+      pgScale(pg.getPoints(), 1, 200, 1); // Stretch along y-axis so normal calculations are more sane
+      var faces = pg.getFaces();
+      var points = pg.getPoints();
+      for (var f=0; f<faces.length; ++f) {
+        var face = faces[f];
+        var indices = face.face;
+        var i0 = indices[0]*4;
+        var i1 = indices[1]*4;
+        var i2 = indices[2]*4;
 
-       pg.xformPoints()
+        var v0 = points.slice(i0,i0+3)
+        var v1 = points.slice(i1,i1+3)
+        var v2 = points.slice(i2,i2+3)
 
-       if (pgPerspective(pg.getPoints(), 400)) continue;
+        var theNormal = getNormal(v2, v1, v0);
+        if (theNormal[1] <=0) { continue; }
 
-       // Need to stretch along y-axis so normal calculations are more sane
-       pgScale(pg.getPoints(), 1, 200, 1);
+        context.beginPath()
+        context.moveTo(v0[0], -v0[2]);
+        context.lineTo(v1[0], -v1[2]);
+        context.lineTo(v2[0], -v2[2]);
 
-       var faces = pg.getFaces();
-       var points = pg.getPoints();
-       for (var f=0; f<faces.length; ++f) {
-         var face = faces[f];
-         var indices = face.face;
-         var i0 = indices[0]*4;
-         var i1 = indices[1]*4;
-         var i2 = indices[2]*4;
+        // Draw the rest of the points
+        for (var i=3; i<indices.length; ++i) {
+          i0 = indices[i]*4;
+          v0 = points.slice(i0,i0+3);
+          context.lineTo(v0[0], -v0[2]);
+        }
 
-         var v0 = points.slice(i0,i0+3)
-         var v1 = points.slice(i1,i1+3)
-         var v2 = points.slice(i2,i2+3)
+        // Render filled area
+        var nx = theNormal[0];
+        var ny = theNormal[1];
+        var nz = theNormal[2];
+        var r = Math.sqrt(nz*nz + ny*ny + nx*nx);
+        ny = ny / r; // Normalize the normal's y component
+        var fillStyle ="rgba(" + ((ny * face.fill.r) | 0) + "," + // x.round == x|0
+                                 ((ny * face.fill.g) | 0) + "," +
+                                 ((ny * face.fill.b) | 0) + "," +
+                                 (face.fill.a) + ")";
 
-         var theNormal = getNormal(v2, v1, v0);
-         if (theNormal[1] <=0) { continue; }
+        if (clear) { clearContext();  clear = 0; }
 
-         context.beginPath()
-         context.moveTo(v0[0], -v0[2]);
-         context.lineTo(v1[0], -v1[2]);
-         context.lineTo(v2[0], -v2[2]);
+        context.fillStyle = fillStyle;
+        context.fill();
 
-         // Draw the rest of the points
-         for (var i=3; i<indices.length; ++i) {
-           i0 = indices[i]*4;
-           v0 = points.slice(i0,i0+3);
-           context.lineTo(v0[0], -v0[2]);
-         }
+        // Outline the faces
+        context.closePath();
+        context.strokeStyle = face.edgeStr;
+        context.lineWidth = "1"; // Adjust outline width thicker when closer to camera.
+        context.stroke();
 
-         // Render filled area
-         var nx = theNormal[0];
-         var ny = theNormal[1];
-         var nz = theNormal[2];
-         var r = Math.sqrt(nz*nz + ny*ny + nx*nx);
-         // Normalize the normal
-         //nz = nz / r;
-         ny = ny / r;
-         //nx = nx / r;
-
-         var fillStyle ="rgba(" + ((ny * face.fill.r) | 0) + "," + // x.round == x|0
-                                  ((ny * face.fill.g) | 0) + "," +
-                                  ((ny * face.fill.b) | 0) + "," +
-                                  (face.fill.a) + ")";
-
-         if (clear) { clearContext();  clear = 0; }
-
-         context.fillStyle = fillStyle;
-         context.fill();
-
-         // Outline the faces
-
-         context.closePath();
-         context.strokeStyle = face.edgeStr;
-         context.lineWidth = "1"; // Adjust outline width thicker when closer to camera.
-         context.stroke();
-
-       } // for faces.length
-     } // for sortedVisibleScene.length
+      } // for faces.length
+    }); // for sortedVisibleScene.length
 
     // Frame rate
     ++frameCount;
