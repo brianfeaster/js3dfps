@@ -786,27 +786,27 @@ function pcGen (label, pm) {
   self.leftMulXform = function (xf) {
     if (!xf) { return self; }
     var lxf = txform || xform; // Use the temporary xform, or base xform.
-    txform = (lxf ? pgMultXformXformNew(xf, lxf) : xf.slice(0));
+    txform = (lxf ? tmatMulTmat(xf, lxf) : xf.slice(0));
     return self;
   }
   self.rightMulXform = function (xf) {
     if (!xf) { return self; }
     var lxf = txform || xform; // Use the crrent temporary xform, or base xform.
-    txform = (lxf ? pgMultXformXformNew(lxf, xf) : xf.slice(0));
+    txform = (lxf ? tmatMulTmat(lxf, xf) : xf.slice(0));
     return self;
   }
 
   self.xformCenter = function () {
     if (txform) {
-      tcenter = matMul4Mat3VecLinear(txform, center);
+      tcenter = txform.tmatMulPoints(center);
     } else {
-      tcenter = matMul4Mat3VecLinear(xform, center);
+      tcenter = txform.tmatMulPoints(center);
     }
     return self;
   }
 
   self.xformPoints = function () {
-    tpoints = matMul4Mat3VecLinear(txform, points);
+    tpoints = txform.tmatMulPoints(points);
     return self;
   }
 
@@ -877,118 +877,100 @@ function getNormal (v0, v1, v2) {
 }
 
 
+
 /***************************************
   Extend the Array object into a transformation matrix.
-  PG_Matrix_library
-  * Pretty sure you'd only want to scale first if the model is defined around the origin.
 ***************************************/
-const trMat = (() => {
 
-  Array.prototype.scale = function (x, y, z) {
-    var x = arguments.length < 1 ? 1 : x;
-    var y = arguments.length < 2 ? x : y;
-    var z = arguments.length < 3 ? y : z;
-    this.push(...[x,0,0,0, 0,y,0,0, 0,0,z,0, 0,0,0,1]);
-    return this;
-  }
+/* abcd   x000   ax by cz d
+   efgh * 0y00 = ex fy gz h  
+   ijkl   00z0   ix jy kz l
+   mnop   0001   mx ny oz p */
+function tmatScale (x=1, y=x, z=y) {
+  return [x,0,0,0, 0,y,0,0, 0,0,z,0, 0,0,0,1];
+}
 
-  /* abcd   x000   ax by cz d
-     efgh * 0y00 = ex fy gz h  
-     ijkl   00z0   ix jy kz l
-     mnop   0001   mx ny oz p */
-  Array.prototype.rightScale = function (xx, yy, zz) {
-    var x = arguments.length < 1 ? 1 : xx;
-    var y = arguments.length < 2 ? x : yy;
-    var z = arguments.length < 3 ? y : zz;
-    this[0] *= x;  this[1] *= y;  this[2] *= z;
-    this[4] *= x;  this[5] *= y;  this[6] *= z;
-    this[8] *= x;  this[9] *= y;  this[10]*= z;
-    this[12]*= x;  this[13]*= y;  this[14]*= z;
-    return this;
-  }
+Array.prototype.tmatScale = function (x=1, y=x, z=y) {
+  this[0] *= x;  this[1] *= y;  this[2] *= z;
+  this[4] *= x;  this[5] *= y;  this[6] *= z;
+  this[8] *= x;  this[9] *= y;  this[10]*= z;
+  this[12]*= x;  this[13]*= y;  this[14]*= z;
+  return this;
+}
 
-  /* Mutate a transformation matrix with a post translation.
-     abcd   100x   a  b  c   ax+by+cz+d
-     efgh * 010y = e  f  g   ex+fy+gz+h
-     ijkl   001z   i  j  k   ix+jy+kz+l
-     mnop   0001   m  n  o   mx+ny+oz+p */
-  Array.prototype.trans = function (x, y, z) {
-    this.push(...[1,0,0,x, 0,1,0,y, 0,0,1,z, 0,0,0,1]);
-    return this;
-  }
+/* Mutate a transformation matrix with a post translation.
+   abcd   100x   a  b  c   ax+by+cz+d
+   efgh * 010y = e  f  g   ex+fy+gz+h
+   ijkl   001z   i  j  k   ix+jy+kz+l
+   mnop   0001   m  n  o   mx+ny+oz+p */
+function tmatTrans (x=1, y=x, z=y) {
+  return [1,0,0,x, 0,1,0,y, 0,0,1,z, 0,0,0,1];
+}
 
-  Array.prototype.rightTrans = function (x, y, z) {
-    this[ 3] += this[ 0]*x + this[ 1]*y + this[ 2]*z;
-    this[ 7] += this[ 4]*x + this[ 5]*y + this[ 6]*z;
-    this[11] += this[ 8]*x + this[ 9]*y + this[10]*z;
-    this[15] += this[12]*x + this[13]*y + this[14]*z;
-    return this
-  }
+Array.prototype.tmatTrans = function (x=1, y=x, z=y) {
+  this[ 3] += this[ 0]*x + this[ 1]*y + this[ 2]*z;
+  this[ 7] += this[ 4]*x + this[ 5]*y + this[ 6]*z;
+  this[11] += this[ 8]*x + this[ 9]*y + this[10]*z;
+  this[15] += this[12]*x + this[13]*y + this[14]*z;
+  return this
+}
     
-  Array.prototype.rotY = function (ang) {
-    var c = cos(ang);
-    var s = sin(ang);
-    this.push(...[c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);
-    return this;
-  }
+/* abcd   c0s0   ac+cS  b  as+cc  d
+  efgh * 0100 = ec+gS  f  es+gc  h
+  ijkl   S0c0   ic+kS  j  is+kc  l
+  mnop   0001   mc+oS  n  ms+oc  p*/
+function tmatRotY (ang=PI90) {
+  var c = cos(ang);
+  var s = sin(ang);
+  return [c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1];
+}
 
-  /*
-   abcd   c0s0   ac+cS  b  as+cc  d
-   efgh * 0100 = ec+gS  f  es+gc  h
-   ijkl   S0c0   ic+kS  j  is+kc  l
-   mnop   0001   mc+oS  n  ms+oc  p*/
-  Array.prototype.rightRotY = function (ang) {
-    var a, b, c = cos(ang), s = sin(ang);
-    a=this[ 0];  b=this[ 2];  this[ 0] = c*a + s*b;  this[ 2] = -s*a + c*b;
-    a=this[ 4];  b=this[ 6];  this[ 4] = c*a + s*b;  this[ 6] = -s*a + c*b;
-    a=this[ 8];  b=this[10];  this[ 8] = c*a + s*b;  this[10] = -s*a + c*b;
-    a=this[12];  b=this[14];  this[12] = c*a + s*b;  this[14] = -s*a + c*b;
-    return this;
-  }
+Array.prototype.tmatRotY = function (ang=PI90) {
+  var a, b, c = cos(ang), s = sin(ang);
+  a=this[ 0];  b=this[ 2];  this[ 0] = c*a + s*b;  this[ 2] = -s*a + c*b;
+  a=this[ 4];  b=this[ 6];  this[ 4] = c*a + s*b;  this[ 6] = -s*a + c*b;
+  a=this[ 8];  b=this[10];  this[ 8] = c*a + s*b;  this[10] = -s*a + c*b;
+  a=this[12];  b=this[14];  this[12] = c*a + s*b;  this[14] = -s*a + c*b;
+  return this;
+}
 
-  Array.prototype.rotX = function (ang) {
-    var c = cos(ang);
-    var s = sin(ang);
-    this.push(...[1,0,0,0, 0,c,-s,0, 0,s,c,0, 0,0,0,1]);
-    return this;
-  }
+/* abcd   1000   q bc+cs  bS+cc d
+   efgh * 0cS0 = e fc+gs  fS+gc h
+   ijkl   0sc0   i jc+ks  jS+kc l
+   mnop   0001   m nc+os  nS+oc p */
+function tmatRotX (ang=90) {
+  var c = cos(ang);
+  var s = sin(ang);
+  return [1,0,0,0, 0,c,-s,0, 0,s,c,0, 0,0,0,1];
+}
 
-  /* abcd   1000   q bc+cs  bS+cc d
-     efgh * 0cS0 = e fc+gs  fS+gc h
-     ijkl   0sc0   i jc+ks  jS+kc l
-     mnop   0001   m nc+os  nS+oc p */
-  Array.prototype.rightRotX = function (ang) {
-    var a, b, c = cos(ang), s = sin(ang);
-    a=this[ 1];  b=this[ 2];  this[ 1] = c*a + s*b;  this[ 2] = -s*a + c*b;
-    a=this[ 5];  b=this[ 6];  this[ 5] = c*a + s*b;  this[ 6] = -s*a + c*b;
-    a=this[ 9];  b=this[10];  this[ 9] = c*a + s*b;  this[10] = -s*a + c*b;
-    a=this[13];  b=this[14];  this[13] = c*a + s*b;  this[14] = -s*a + c*b;
-    return this;
-  }
+Array.prototype.tmatRotX = function (ang=PI90) {
+  var a, b, c = cos(ang), s = sin(ang);
+  a=this[ 1];  b=this[ 2];  this[ 1] = c*a + s*b;  this[ 2] = -s*a + c*b;
+  a=this[ 5];  b=this[ 6];  this[ 5] = c*a + s*b;  this[ 6] = -s*a + c*b;
+  a=this[ 9];  b=this[10];  this[ 9] = c*a + s*b;  this[10] = -s*a + c*b;
+  a=this[13];  b=this[14];  this[13] = c*a + s*b;  this[14] = -s*a + c*b;
+  return this;
+}
 
-  Array.prototype.rotZ = function (ang) {
-    var c = cos(ang);
-    var s = sin(ang);
-    this.push(...[c,-s,0,0, s,c,0,0, 0,0,1,0, 0,0,0,1]);
-    return this;
-  }
+function tmatRotZ (ang=PI90) {
+  var c = cos(ang);
+  var s = sin(ang);
+  return [c,-s,0,0, s,c,0,0, 0,0,1,0, 0,0,0,1];
+}
 
-  /* abcd   cS00   ac+bs aS+bc c d
-     efgh * sc00 = ec+fs eS+fc g h
-     ijkl   0010   ic+js iS+jc k l
-     mnop   0001   mc+ns mS+nc o p */
-  Array.prototype.rightRotZ = function (ang) {
-    var i, a, b, c = cos(ang), s = sin(ang);
-    a=this[ 0];  b=this[ 1];  this[ 0] =  c*a + s*b;  this[ 1] = -s*a + c*b;
-    a=this[ 4];  b=this[ 5];  this[ 4] =  c*a + s*b;  this[ 5] = -s*a + c*b;
-    a=this[ 8];  b=this[ 9];  this[ 8] =  c*a + s*b;  this[ 9] = -s*a + c*b;
-    a=this[12];  b=this[13];  this[12] =  c*a + s*b;  this[13] = -s*a + c*b;
-    return this;
-  }
-
-  return () => [];
-})() // trMat 
-
+/* abcd   cS00   ac+bs aS+bc c d
+   efgh * sc00 = ec+fs eS+fc g h
+   ijkl   0010   ic+js iS+jc k l
+   mnop   0001   mc+ns mS+nc o p */
+Array.prototype.tmatRotZ = function (ang=PI90) {
+  var i, a, b, c = cos(ang), s = sin(ang);
+  a=this[ 0];  b=this[ 1];  this[ 0] =  c*a + s*b;  this[ 1] = -s*a + c*b;
+  a=this[ 4];  b=this[ 5];  this[ 4] =  c*a + s*b;  this[ 5] = -s*a + c*b;
+  a=this[ 8];  b=this[ 9];  this[ 8] =  c*a + s*b;  this[ 9] = -s*a + c*b;
+  a=this[12];  b=this[13];  this[12] =  c*a + s*b;  this[13] = -s*a + c*b;
+  return this;
+}
 
 
 /* Left multiply a transformation matrix with a list of vectors.  Both are linear arrays.
@@ -997,12 +979,12 @@ const trMat = (() => {
     i j k l   * z z2 ...]
     m n o p]
 */
-function matMul4Mat3VecLinear (mat, vec) {
+Array.prototype.tmatMulPoints = function (vec) {
   var x, y, z, w, r, q=0;
-  var a=mat[q++], b=mat[q++], c=mat[q++], d=mat[q++];
-  var e=mat[q++], f=mat[q++], g=mat[q++], h=mat[q++];
-  var i=mat[q++], j=mat[q++], k=mat[q++], l=mat[q++];
-  var m=mat[q++], n=mat[q++], o=mat[q++], p=mat[q++];
+  var a=this[q++], b=this[q++], c=this[q++], d=this[q++];
+  var e=this[q++], f=this[q++], g=this[q++], h=this[q++];
+  var i=this[q++], j=this[q++], k=this[q++], l=this[q++];
+  var m=this[q++], n=this[q++], o=this[q++], p=this[q++];
   var res=Array(vec.length/3*4);
   for (r=0; r<vec.length; r+=3) {
      x = vec[r];
@@ -1017,12 +999,13 @@ function matMul4Mat3VecLinear (mat, vec) {
   return res;
 };
 
+
 /*    [a b c d    [A B C D]
  z =   e f g h  *  E F G H]
        i j k l     I J K L]
        m n o p]    M N O P]
 */
-function pgMultXformXformNew (x, y) {
+function tmatMulTmat (x, y) {
 
   var a=x[0], b=x[1], c=x[2], d=x[3];
   var e=x[4], f=x[5], g=x[6], h=x[7];
@@ -1121,13 +1104,13 @@ var arena = [
 "                                                                ",
 "                                                                ",
 "                                                                ",
-"                                                                ",
+"                               p                                ",
 "                                                                ",
 "                                                                ",
 "                                                                ",
 "                              xxx                            | |",
-" T                            xpx                             T ",
-"                              xAx                            | |"].reverse();
+" T                            xAx                             T ",
+"                              xxx                            | |"].reverse();
 
 var mapWithin = function (x, y) { return (0<=x) && (x<arena[0].length) && (0<=y) && (y<arena.length); }
 var mapIsSolid = function (x, y) { return false && mapWithin(x,y) && 5 != arena[y|0][x|0] && 3 != arena[y|0][x|0]; }
@@ -1136,29 +1119,30 @@ var mapIsPill  = function (x, y) { return mapWithin(x,y) && 1 == arena[y|0][x|0]
 /* Create all objects that make up scene (the maze) and set their starting positions
 */
 function spawnObjectsFromMap () {
+  var ax, ay;
   arena.forEach( (row, y) => {
       for (var x=0; (x < row.length); ++x) {
         switch (row[x]) {
           case 1 : {
-            //scene.push(pcGen("floor", pmGenFloor()).setXform(trMat().trans(x,y,0)))
+            //scene.push(pcGen("floor", pmGenFloor()).setXform(tmatTrans(x,y,0)))
             break;
           }
           case " " :
             if (rnd(64) == 0) {
               scene.push(pcGen("gravel", pmGenCubeRGB())
-                         .setXform(trMat().trans(x,y,0).rightScale(1).rightTrans(0,0,.5))
+                         .setXform(tmatTrans(x,y,0).tmatScale(1).tmatTrans(0,0,.5))
                          .setAni( (pc, state) => {
-                           pc.rightMulXform(trMat().rotZ(state.time/1000))
+                           pc.rightMulXform(tmatRotZ(state.time/1000))
                          } ));
             }
             break;
           case "x" : { // road
             scene.push(pcGen("floor", pmGenFloor(0.5, "800f", "f00f"))
-                       .setXform(trMat().trans(x,y,0)))
+                       .setXform(tmatTrans(x,y,0)))
             break;
           }
           case "A" : { // special case for user's avatar
-            scene.push(spawnActor(x, y, 0, PI0, PI0));
+            scene.push(spawnAvatar(ax=x, ay=y, 0, PI0, -PI10));
             break;
           }
           case "g" : { // special case for ghost
@@ -1166,26 +1150,25 @@ function spawnObjectsFromMap () {
             break;
           }
           case "T" : {
-            scene.push(pcGen("iotower", pmGenPyramidSolid(0.5, "f00f", "800f")).setXform(trMat().trans(x,y,0).rightScale(1,1,100)));
+            scene.push(pcGen("iotower", pmGenPyramidSolid(0.5, "f00f", "800f")).setXform(tmatTrans(x,y,0).tmatScale(1,1,100)));
             break;
           }
           case "p" : { // turrent (the player AKA pacman AKA the cannon/turret)  For now the fake opponent
-            // Notice no xform is set.  The entire transformation is created each tick.
             scene.push(
               pcGen("turret", pmGen18gon())
-              .setXform(trMat().trans(x,y,0))
-              //.setAni( (pc, state) => {
-              //  pc.leftMulXform(trMat().trans(rem.x/2, rem.y/2, 0).rightRotZ(-rem.d))
-              //})
+              .setXform(tmatTrans(x,y,0))
+              .setAni( (pc, state) => {
+                pc.rightMulXform(tmatTrans((rem.x-ax)/1, (rem.y-ay)/1, 0).tmatRotZ(-rem.d))
+              })
             );
             break;
           }
           case "/" : {
-            scene.push(pcGen("maze", pmGenCubeRainbow()).setXform(trMat().trans(x,y,0).rightScale(1,1,9).rightTrans(0,0,.5)));
+            scene.push(pcGen("maze", pmGenCubeRainbow()).setXform(tmatTrans(x,y,0).tmatScale(1,1,9).tmatTrans(0,0,.5)));
             break;
           }
           case "|" : { // outer wall
-            scene.push(pcGen("wall", pmGenCubeSolid()).setXform(trMat().trans(x,y,0).rightScale(1,1,5).rightTrans(0,0,.5)));
+            scene.push(pcGen("wall", pmGenCubeSolid()).setXform(tmatTrans(x,y,0).tmatScale(1,1,5).tmatTrans(0,0,.5)));
             break;
           }
         } // switch
@@ -1202,13 +1185,13 @@ function spawnCannon (actor) {
   var loc = {x:actor.x, y:actor.y, z:actor.z+1, dir:actor.dir}; // fake Actor
   var body = Body(Trajectory(loc, 4, -actor.azi, 30), currentTime); // grav ang vel
   scene.push(pcGen("cannon", pmGen18gon())
-             .setXform(trMat().scale(1))
+             .setXform(tmatScale(1))
              .setAni( (pc, state) => { // this polygroupCanvas, state current just {:time}
                if (loc.z <= 0.0) {
-                 pc.leftMulXform(trMat().trans(loc.x, loc.y, 0.0).rightRotZ(state.time/50));
+                 pc.leftMulXform(tmatTrans(loc.x, loc.y, 0.0).tmatRotZ(state.time/50));
                 } else {
                  loc = body.tick(state.time);
-                 pc.leftMulXform(trMat().trans(loc.x, loc.y, loc.z).rightRotZ(state.time/50));
+                 pc.leftMulXform(tmatTrans(loc.x, loc.y, loc.z).tmatRotZ(state.time/50));
                }} ));
   // BF: IPC is still hacky.  Send 'fire' string to everyone for fun.
   if (socket.readyState == socket.OPEN) { socket.send("fire"); }
@@ -1236,9 +1219,7 @@ function Actor (x, y, z, dir, azi) {
     // Jumping
     if (jumper) {
       let xyz = jumper.tick(currentTime);
-      self.x = xyz.x; // TODO BF use fancy prototype  setxyz
-      self.y = xyz.y;
-      self.z = xyz.z;
+      self.setxyz(xyz);
       if (self.z < 0.0) {
         self.z = 0.0;
         jumper = null;
@@ -1260,14 +1241,15 @@ function Actor (x, y, z, dir, azi) {
 
 
 var avatar = null;
-function spawnActor (x, y, z, d) {
-  avatar = Actor(x, y, z, d, 0);
+
+function spawnAvatar (x, y, z, d, a) {
+  avatar = Actor(x, y, z, d, a);
   return pcGen("avatar", pmGen18gon())
-         .setXform(trMat().scale(.5))
+         .setXform(tmatScale(.5))
          .setAni( (pc, state) => { // this polygroupCanvas, state current just {:time}
            avatar.tick(pc, state);
-           pc.leftMulXform(trMat().trans(avatar.x, avatar.y, avatar.z)
-                                  .rightRotZ(-avatar.dir))} );
+           pc.leftMulXform(tmatTrans(avatar.x, avatar.y, avatar.z)
+                           .tmatRotZ(-avatar.dir))} );
 }
 
 /***************************************
@@ -1276,11 +1258,11 @@ function spawnActor (x, y, z, d) {
 function spawnGhost (x, y) {
   let e = new Entity("ghost", [x, y, 0.5], 4); // BF Entity to be refactored into Actor
   return pcGen("ghost", pmGenGhost())
-         .setXform(trMat().rotZ(PI180)) // ghost is rotated
+         .setXform(tmatRotZ(PI180)) // ghost is rotated
          .setAni((pc, state) => {
            e.tick(currentTime);
-           pc.leftMulXform(trMat().trans(e.locam.x, e.locam.y, 0)
-                                     .rightRotZ((e.diram)/8 * PI360));
+           pc.leftMulXform(tmatTrans(e.locam.x, e.locam.y, 0)
+                           .tmatRotZ((e.diram)/8 * PI360));
            collision = collision || (distLocLoc(avatar.x, avatar.y, avatar.z, e.locam) < .6) // Detect collision between this ghost and pacman
          } );
 }
@@ -1295,17 +1277,15 @@ function spawnThunderDome () {
   for (a=0; a<5000; a+=8) {
     scene.push(
       pcGen("dome", pmGenCubeRainbow())
-      .setXform(trMat()
-                .rotZ(a*PI1)
-                .rightRotX(a*PI1/90)
-                .rightTrans(0, 100, 0)
-                .rightRotY(a*PI1)
-                .rightScale(5,5,5))
+      .setXform(tmatRotZ(a*PI1)
+                .tmatRotX(a*PI1/90)
+                .tmatTrans(0, 100, 0)
+                .tmatRotY(a*PI1)
+                .tmatScale(5,5,5))
       .setAni( (pc, state) =>
-        pc.rightMulXform(trMat()
-                        .rotZ(currentTime/20*PI1)
-                        .rightRotY(currentTime/10*PI1)
-                        .rightRotX(currentTime/10*PI1)) ));
+        pc.rightMulXform(tmatRotZ(currentTime/20*PI1)
+                         .tmatRotY(currentTime/10*PI1)
+                         .tmatRotX(currentTime/10*PI1)) ));
   }
 }
 
@@ -1313,10 +1293,9 @@ function spawnThunderDome () {
 /* Helpful helpers.
 */
 function genCameraTransform (actor) {
-  return trMat()
-         .rotX(actor.azi)
-         .rightRotZ(actor.dir)
-         .rightTrans(-actor.x, -actor.y, -actor.z-elevation)
+  return tmatRotX(actor.azi)
+         .tmatRotZ(actor.dir)
+         .tmatTrans(-actor.x, -actor.y, -actor.z-elevation)
 }
 
 
@@ -1622,7 +1601,7 @@ socket.onclose = function (event) {
 
 socket.onmessage = function (event) {
   var msg = event.data;
-  DB.post("onmsg",  msg.length);
+  //DB.post("onmsg",  msg.length);
   if (typeof msg == "string") { // String messages are just echoed to console.
     DB.post("str", msg);
   } else if (msg instanceof ArrayBuffer) {
@@ -1637,7 +1616,7 @@ socket.onmessage = function (event) {
       rem.d = dv.getFloat32(2);
       rem.x = dv.getFloat32(6);
       rem.y = dv.getFloat32(10);
-      DB.post(`[mov ${dv.getUint8(1)}]`, `${rem.d.toFixed(2)} ${rem.x.toFixed(2)} ${rem.y.toFixed(2)}`);
+      //DB.post(`[mov ${dv.getUint8(1)}]`, `${rem.d.toFixed(2)} ${rem.x.toFixed(2)} ${rem.y.toFixed(2)}`);
       break
     }
   } else {
