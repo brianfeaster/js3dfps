@@ -23,7 +23,7 @@ const DB = (function () {
   var log = function (h, o) {
     switch (arguments.length) {
      case 1:
-       Log(h);
+       Log("\n"+h);
        break;
      case 2:
        Log("\x1b[35m==" + h + "=".repeat(70) + "\x1b[0m")
@@ -52,8 +52,8 @@ function server () {
 // Agents
 ////////////////////////////////////////////////////////////////////////////////
 function Agent (s, id) { // id socket
-  this.id      = id;
   this.sock    = s;
+  this.id      = id;
   this.buffer  = Buffer(0);
   this.headers = {};
   this.state   = 0;
@@ -64,11 +64,12 @@ function Agent (s, id) { // id socket
 ////////////////////////////////////////////////////////////////////////////////
 // Listener
 ////////////////////////////////////////////////////////////////////////////////
-let connectionCount= 0;
+let idCount = 0;
+let agents = [];
 
 function receiveConnection (sock) {
-  sock.on('data', receiveBuffer.bind(new Agent(sock, ++connectionCount)));
-  // TODO notify other clients new player.  Notify player of all current players.
+  var agent = new Agent(sock, ++idCount);
+  sock.on('data', receiveBuffer.bind(agent));
 };
 
 
@@ -90,15 +91,17 @@ function receiveBuffer (b) { // Buffer
 function consume (a) { // agent
   var msg;
   while (!a.yeld) {
-    DB(`${yellow}[${a.id}:${a.state}]${util.inspect(a.buffer)}${off}`);
+    DB(`${yellow}{${a.state}:${a.id}}${util.inspect(a.buffer)}${off}`);
     switch (a.state) {
     case 0: // READ HEADERS AND UPDATE WEBSOCKET PROTOCOL
       consumeHttpHeaders(a);
       break;
      case 1:
       a.sock.write(Uint8Array.of(0x82, 0x02, 0, a.id), "binary")
+      agents.push(a);
       a.sock.write("\x81\x11Welcome To Server", "binary")
       a.sock.write("\x89\x08Welcome!", "binary");
+      // TODO notify other clients new player.  Notify player of all current players.
       a.state = 2;
     case 2: // DETERMINE NEXT MESSAGE
       getNextState(a);
@@ -155,14 +158,21 @@ function writeStream (msg, s) {
   s.write("\x81" + String.fromCharCode(len) + msg, "binary");
 }
 
-function writeStreamBinary (msg, s) {
-  var buff = Buffer.concat([Uint8Array.of(0x82, msg.byteLength), msg]);
-  //DB("<sendbin<" + buff.length + " bytes."); // buff.map( (x) => x.toString(16)));
-  s.write(buff, "binary");
+
+
+function writeStreamBinary (msg, aa) {
+  // Re-send to all the agents.
+  agents.forEach ( (a) => {
+    if (a.sock.readyState == 'open') {
+      var buff = Buffer.concat([Uint8Array.of(0x82, msg.byteLength+1, 1, aa.id), msg.subarray(1)]);
+      DB("<sendbin<" + buff.length + " bytes." + util.inspect(buff)); // buff.map( (x) => x.toString(16)));
+      a.sock.write(buff, "binary");
+    }
+  } );
 }
 
 function consumeDecodedMsgBinary (msg, a) { // Buff Agent
-  writeStreamBinary(msg, a.sock);
+  writeStreamBinary(msg, a);
 }
 
 function consumeDecodedMsg (msg, a) {

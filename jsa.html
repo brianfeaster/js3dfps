@@ -1104,7 +1104,7 @@ var arena = [
 "                                                                ",
 "                                                                ",
 "                                                                ",
-"                               p                                ",
+"                                                                ",
 "                                                                ",
 "                                                                ",
 "                                                                ",
@@ -1154,13 +1154,6 @@ function spawnObjectsFromMap () {
             break;
           }
           case "p" : { // turrent (the player AKA pacman AKA the cannon/turret)  For now the fake opponent
-            scene.push(
-              pcGen("turret", pmGen18gon())
-              .setXform(tmatTrans(x,y,0))
-              .setAni( (pc, state) => {
-                pc.rightMulXform(tmatTrans((rem.x-ax)/1, (rem.y-ay)/1, 0).tmatRotZ(-rem.d))
-              })
-            );
             break;
           }
           case "/" : {
@@ -1185,7 +1178,7 @@ function spawnCannon (actor) {
   var loc = {x:actor.x, y:actor.y, z:actor.z+1, dir:actor.dir}; // fake Actor
   var body = Body(Trajectory(loc, 4, -actor.azi, 30), currentTime); // grav ang vel
   scene.push(pcGen("cannon", pmGen18gon())
-             .setXform(tmatScale(1))
+             .setXform(tmatScale(.1))
              .setAni( (pc, state) => { // this polygroupCanvas, state current just {:time}
                if (loc.z <= 0.0) {
                  pc.leftMulXform(tmatTrans(loc.x, loc.y, 0.0).tmatRotZ(state.time/50));
@@ -1303,13 +1296,13 @@ function genCameraTransform (actor) {
   Globals
 ***************************************/
 var last = {};
-var rem = {};
 var quit = false;
 var currentTime = getTime();
 var collision = false;
 var scene = []; // Simple array of renderable object groups.
 var elevation = .5;
 var parentStyle = window.getComputedStyle(canvas.parentElement); // Adjust canvas size to parent's size
+var uid = -1;
 
 /***************************************
   Main
@@ -1438,19 +1431,20 @@ function Main () {
     }
 
     // Update server of my wareabouts.
-    if (socket.readyState && (last.d != avatar.dir || last.x != avatar.x || last.y != avatar.y)) {
+    if (socket.readyState && 0<uid && (last.d != avatar.dir || last.x != avatar.x || last.y != avatar.y)) {
         //var b = Uint8Array.alloc(1+1+8+8+8);
         last.d = avatar.dir;
         last.x = avatar.x;
         last.y = avatar.y;
 
-        var buff = new ArrayBuffer(14);
+        //DB(`<< ${last.d} ${last.x} ${last.y}`);
+
+        var buff = new ArrayBuffer(13);
         var db = new DataView(buff);
         db.setUint8(0, 1); // 1 is move
-        db.setUint8(1, 2); // this will be the id
-        db.setFloat32(2, last.d);
-        db.setFloat32(6, last.x);
-        db.setFloat32(10, last.y);
+        db.setFloat32(1, last.d);
+        db.setFloat32(5, last.x);
+        db.setFloat32(9, last.y);
         //DB("sending" + buff.byteLength + " bytes.");
         if (socket.readyState == socket.OPEN) { socket.send(buff); }
     }
@@ -1598,25 +1592,51 @@ socket.onclose = function (event) {
   DB("websocket closed.");
 }
 
+var players = []
+function spawnNewPlayer (uid) {
+  var player = {d:0, x:0, y:0, update:true};
+  players[uid] = player;
+  //DB("spawned player" + uid);
+  scene.push(
+    pcGen("turret", pmGen18gon())
+    //.setXform(tmatTrans(0,0,0))
+    .setAni( (pc, state) => {
+      if (player.update) {
+        //DB(`updating player ${player.d.toFixed(2)} ${player.x.toFixed(2)} ${player.y.toFixed(2)}`);
+        pc.setXform(tmatTrans(player.x/1, player.y/1, 0).tmatRotZ(-player.d))
+        player.update = false;
+      }
+    })
+  );
+  return player;
+}
 
 socket.onmessage = function (event) {
-  var msg = event.data;
+  var msg = event.data, player;
   //DB.post("onmsg",  msg.length);
   if (typeof msg == "string") { // String messages are just echoed to console.
-    DB.post("str", msg);
+    //DB.post("str", msg);
   } else if (msg instanceof ArrayBuffer) {
     var dv = new DataView(msg);
     var cmd = dv.getUint8(0);
     var usr = dv.getUint8(1);
     switch (cmd)  {
-    case 0:                      // My new user ID from the server.
+    case 0: // My new user ID from the server.
       // Create my entity / turret object.
+      uid = usr;
+      //DB(`>>${cmd}:${usr}`);
+      spawnNewPlayer(usr);
       break;
     case 1:                      // User moved and/or rotated.  If new user, create him.
-      rem.d = dv.getFloat32(2);
-      rem.x = dv.getFloat32(6);
-      rem.y = dv.getFloat32(10);
-      //DB.post(`[mov ${dv.getUint8(1)}]`, `${rem.d.toFixed(2)} ${rem.x.toFixed(2)} ${rem.y.toFixed(2)}`);
+      player = players[usr];
+      if (!player) {
+        player = spawnNewPlayer(usr);
+      }
+      player.d = dv.getFloat32(2);
+      player.x = dv.getFloat32(6);
+      player.y = dv.getFloat32(10);
+      player.update = true;
+      //DB(`>>${cmd}:${usr} ` + `${player.d.toFixed(2)} ${player.x.toFixed(2)} ${player.y.toFixed(2)}`);
       break
     }
   } else {
