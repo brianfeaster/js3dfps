@@ -9,8 +9,9 @@ const Util=require('util');
 const Crypto=require('crypto');
 const Log = process.stdout.write.bind(process.stdout); //console.log;
 String.prototype.hex = function(){ return [...this].map(c=>("0"+c.charCodeAt().toString(16)).slice(-2)).join(); }
-const red   ='\x1b[31m'
-const yellow='\x1b[33m'
+const red   ='\x1b[31m' // input
+const green ='\x1b[32m' // output
+const yellow='\x1b[33m' // processing
 const off   ='\x1b[0m'
 
 
@@ -49,28 +50,41 @@ function server () {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+// Listener
+////////////////////////////////////////////////////////////////////////////////
+function receiveConnection (sock) {
+  var agent = new Agent(sock);
+  sock.on('data', agent.receiveBuffer.bind(agent));
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
 // Agents
 ////////////////////////////////////////////////////////////////////////////////
-function Agent (s, id) { // id socket
+let receiveCount = 0;
+let AgentCount = 0;
+let Agents = [];
+
+function Agent (s) { // id socket
   this.sock    = s;
-  this.id      = id;
+  this.id      = AgentCount++;
   this.buffer  = Buffer(0);
   this.headers = {};
   this.state   = 0;
   this.yeld    = false;
+  this.add     = function () {
+    Agents.push(this);
+    this.sock.write(Uint8Array.of(0x82, 0x02, 0, a.id), "binary") // BIN - Give client an ID
+    this.sock.write("\x81\x18Welcome To JS3DArtillery", "binary") // TXT
+    this.sock.write("\x89\x08Welcome!", "binary"); // PING
+  }
+  this.receiveBuffer = function (buff) {
+    this.buffer = Buffer.concat([this.buffer, buff]);
+    ++receiveCount;
+    DB(`${red}<${this.id} ${receiveCount} ${this.buffer.length}> ${util.inspect(this.buffer,{depth:1000})}${off}`);
+    consume(this); // Attempt to consume buffer contents.
+  }
 }
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Listener
-////////////////////////////////////////////////////////////////////////////////
-let idCount = 0;
-let agents = [];
-
-function receiveConnection (sock) {
-  var agent = new Agent(sock, ++idCount);
-  sock.on('data', receiveBuffer.bind(agent));
-};
 
 
 
@@ -78,44 +92,30 @@ function receiveConnection (sock) {
 // State Machine
 ////////////////////////////////////////////////////////////////////////////////
 
-function receiveBuffer (b) { // Buffer
-  var agent = this; // Cheating
-  var id = agent.id;
-  var s = agent.sock;
-  DB(`${red}[${id}]${util.inspect(b,{depth:1000})}${off}`);
-  //DB(b.hex())
-  agent.buffer = Buffer.concat([agent.buffer,b]);
-  consume(agent);
-}
-
 function consume (a) { // agent
   var msg;
   while (!a.yeld) {
-    DB(`${yellow}{${a.state}:${a.id}}${util.inspect(a.buffer)}${off}`);
+    DB(`${yellow}{${a.id} ${a.state} ${a.buffer.length}}${off}`);
     switch (a.state) {
     case 0: // READ HEADERS AND UPDATE WEBSOCKET PROTOCOL
       consumeHttpHeaders(a);
       break;
      case 1:
-      a.sock.write(Uint8Array.of(0x82, 0x02, 0, a.id), "binary")
-      agents.push(a);
-      a.sock.write("\x81\x11Welcome To Server", "binary")
-      a.sock.write("\x89\x08Welcome!", "binary");
-      // TODO notify other clients new player.  Notify player of all current players.
+      a.add();
       a.state = 2;
     case 2: // DETERMINE NEXT MESSAGE
       getNextState(a);
       break;
-    case 3:
+    case 3: // TEXT
       msg = consumeMsgText(a);
       if (!a.yeld) { consumeDecodedMsg(msg, a); }
       break;
-    case 4:
+    case 4: // PONG
       consumeMsgPong(a);
       break;
     case 5:
       msg = consumeMsgBinary(a);
-      if (!a.yeld) { consumeDecodedMsgBinary(msg, a); }
+      if (!a.yeld) { bcastBinaryMsg(msg, a); }
       break;
     case 88:
       msg = consumeMsgText(a);
@@ -123,13 +123,13 @@ function consume (a) { // agent
       break;
     case 99:
       a.yeld = true;
-    }
-  }
+    } // switch
+  } // while
   a.yeld = false;
 }
 
 function getNextState (a) {
-  if (1 <= a.buffer.length) {
+  if (0 < a.buffer.length) {
     switch (a.buffer[0]) {
     case 0x81 :
       a.state = 3; // Text
@@ -137,11 +137,11 @@ function getNextState (a) {
     case 0x82 :
       a.state = 5; // Binary
       break;
-    case 0x8a :
-      a.state = 4; // PONG
-      break;
     case 0x88 :
       a.state = 88; // Closing
+      break;
+    case 0x8a :
+      a.state = 4; // PONG
       break;
     default :
       a.state = 99;
@@ -152,32 +152,29 @@ function getNextState (a) {
   }
 }
 
-function writeStream (msg, s) {
+function writeTextMsg (msg, s) {
   var len = msg.length;
-  DB("<writeStream<" + msg);
+  DB("<" + msg);
   s.write("\x81" + String.fromCharCode(len) + msg, "binary");
 }
 
 
 
-function writeStreamBinary (msg, aa) {
+function bcastBinaryMsg (msg, aa) {
   // Re-send to all the agents.
-  agents.forEach ( (a) => {
-    if (a.sock.readyState == 'open') {
+  Agents.forEach ( (a) => {
+    if (aa.id != a.id && a.sock.readyState == 'open') {
       var buff = Buffer.concat([Uint8Array.of(0x82, msg.byteLength+1, 1, aa.id), msg.subarray(1)]);
-      DB("<sendbin<" + buff.length + " bytes." + util.inspect(buff)); // buff.map( (x) => x.toString(16)));
+      DB(`${green}<${a.id}<-${aa.id} ${buff.length}< ${util.inspect(buff)}${off}`);
       a.sock.write(buff, "binary");
     }
   } );
 }
 
-function consumeDecodedMsgBinary (msg, a) { // Buff Agent
-  writeStreamBinary(msg, a);
-}
 
 function consumeDecodedMsg (msg, a) {
   //var msgs = msg.split(' ')
-  //if (msgs[0] == 'l') { writeStream(msgs[2] + " " + msgs[3] + " " + msgs[4], s); }
+  //if (msgs[0] == 'l') { writeTextMsg(msgs[2] + " " + msgs[3] + " " + msgs[4], s); }
 }
 
 // Doesn't consume buffer until entire pong command is evaluated.

@@ -288,6 +288,8 @@ function Body (pf, start=getTime()) { // parameterized function
 }
 
 
+/* TODO: Get fancy with this and formulate the 1st derivitave so I can compute the slop and thus new angle during a bounce.
+*/
 function Trajectory (actor, gravity, ang, vel) {
   var x = actor.x;
   var y = actor.y;
@@ -298,9 +300,9 @@ function Trajectory (actor, gravity, ang, vel) {
   var vy  = (vh * cos(dir)); // Hor.y
   var vx  = (vh * sin(dir)); // Hor.x
   var vv  = (vel * sin(ang)); // Vertical
-  var f = (t) => ({x: x + vx * t,
-                   y: y + vy * t,
-                   z: z + acc * t * t + vv * t})
+  var f = (t) => ({x: vx*t + x,
+                   y: vy*t + y,
+                   z: acc*t*t + vv*t + z})
   f.actor = actor;
   return f;
 }
@@ -811,7 +813,7 @@ function pcGen (label, pm) {
   }
 
   self.getCenter = function () {
-    return tcenter ? tcenter : center;
+    return tcenter;
   }
   self.getPoints = function () {
     return tpoints;
@@ -1175,16 +1177,18 @@ function spawnObjectsFromMap () {
  Create the new cannon at the location of the user's avatar/actor.
 *******************************************************************************/
 function spawnCannon (actor) {
-  var loc = {x:actor.x, y:actor.y, z:actor.z+1, dir:actor.dir}; // fake Actor
-  var body = Body(Trajectory(loc, 4, -actor.azi, 30), currentTime); // grav ang vel
+  var loc = {x:actor.x, y:actor.y, z:actor.z+0.25, dir:actor.dir}; // fake Actor
+  var body = Body(Trajectory(loc, 8, -actor.azi, 10), currentTime); // grav ang vel
   scene.push(pcGen("cannon", pmGen18gon())
              .setXform(tmatScale(.1))
              .setAni( (pc, state) => { // this polygroupCanvas, state current just {:time}
+
                if (loc.z <= 0.0) {
                  pc.leftMulXform(tmatTrans(loc.x, loc.y, 0.0).tmatRotZ(state.time/50));
                 } else {
                  loc = body.tick(state.time);
                  pc.leftMulXform(tmatTrans(loc.x, loc.y, loc.z).tmatRotZ(state.time/50));
+
                }} ));
   // BF: IPC is still hacky.  Send 'fire' string to everyone for fun.
   if (socket.readyState == socket.OPEN) { socket.send("fire"); }
@@ -1202,7 +1206,7 @@ function gasWalkWest(v)  { gas[3] = v; }
 function Actor (x, y, z, dir, azi) {
   var self = {x:x, y:y, z:z, dir:dir, azi:azi};
   var jumper = null;
-  self.tick = function (pc, state) {
+  self.tick = function () {
     // Normal walking/strafing.
     if (gas[0] || gas[1] || gas[2] || gas[3]) {
       var d = self.dir + [[PI315,PI0,PI45],[PI270,PI0,PI90],[PI225,PI180,PI135]][gas[0]-gas[1]+1][gas[2]-gas[3]+1];
@@ -1222,7 +1226,7 @@ function Actor (x, y, z, dir, azi) {
   };
   self.jump = function () {
     if (jumper) return;
-    jumper = Body(Trajectory(self, 5, -avatar.azi, 30), currentTime); // grav ang vel
+    jumper = Body(Trajectory(self, 5, -avatar.azi, 20), currentTime); // grav ang vel
     return self;
   };
   self.dump = function () {
@@ -1240,7 +1244,7 @@ function spawnAvatar (x, y, z, d, a) {
   return pcGen("avatar", pmGen18gon())
          .setXform(tmatScale(.5))
          .setAni( (pc, state) => { // this polygroupCanvas, state current just {:time}
-           avatar.tick(pc, state);
+           avatar.tick();
            pc.leftMulXform(tmatTrans(avatar.x, avatar.y, avatar.z)
                            .tmatRotZ(-avatar.dir))} );
 }
@@ -1298,6 +1302,7 @@ function genCameraTransform (actor) {
 var last = {};
 var quit = false;
 var currentTime = getTime();
+var nextTimeIPC = currentTime;
 var collision = false;
 var scene = []; // Simple array of renderable object groups.
 var elevation = .5;
@@ -1331,12 +1336,8 @@ function Main () {
     var pgMatScene;
 
     currentTime = getTime();
-
-    // Reset and 'tick' each object.
-    scene.forEach ( pg => pg.reset().tick(state) );
-
-    // Camera transformation matrix.  In reverse order since-left multiplied Mat*[vercies]
-    pgMatScene = genCameraTransform(avatar);
+    scene.forEach ( pg => pg.reset().tick(state) ); // Reset and 'tick' each object.
+    pgMatScene = genCameraTransform(avatar); // Camera transformation matrix.
 
     /* Combine camera xform with each object and apply to the center point.
     Those objects with center point in front of camera go on to the renering phase. */
@@ -1348,19 +1349,15 @@ function Main () {
       }
     } );
 
-    // Sort the new group of potentially visible groups
-    sortedVisibleScene.sort((a,b) => b.getCenter()[1] - a.getCenter()[1]);
-
-    /* Transform and plot each object
-    */
-    sortedVisibleScene.forEach ( (pg) => {
-      pg.xformPoints()
+    // Sort all objects, along y, then transform each vertex with their xfrom matrix, then plot.
+    sortedVisibleScene
+    .sort( (a,b) => b.getCenter()[1] - a.getCenter()[1] )
+    .forEach ( (pg) => {
+      pg.xformPoints();
       if (pgPerspective(pg.getPoints(), 400)) return; // skips if any point is behind camera
       pgScale(pg.getPoints(), 1, 200, 1); // Stretch along y-axis so normal calculations are more sane
-      var faces = pg.getFaces();
       var points = pg.getPoints();
-      for (var f=0; f<faces.length; ++f) {
-        var face = faces[f];
+      pg.getFaces().forEach ( (face) => {
         var indices = face.face;
         var i0 = indices[0]*4;
         var i1 = indices[1]*4;
@@ -1370,7 +1367,7 @@ function Main () {
         var v2 = points.slice(i2,i2+3)
         var theNormal = getNormal(v2, v1, v0);
 
-        if (theNormal[1] <=0) { continue; }
+        if (theNormal[1] <=0) { return; }
 
         context.beginPath()
         context.moveTo(v0[0], -v0[2]);
@@ -1406,8 +1403,8 @@ function Main () {
         context.lineWidth = "1"; // Adjust outline width thicker when closer to camera.
         context.stroke();
 
-      } // for faces.length
-    } ); // for sortedVisibleScene.length
+      } );// forEach face
+    } ) // forEach PC (Polygonal Convex Surface Canvas)
 
     // Frame rate
     ++frameCount;
@@ -1422,7 +1419,7 @@ function Main () {
       context.textAlign = "right";
       context.textBaseline = "top";
       context.font = "bold 16px Arial";
-      context.fillText(frameRate.toFixed(1), width/2, -height/2);
+      context.fillText(`${sortedVisibleScene.length}/${scene.length} ${frameRate.toFixed(1)}`, width/2, -height/2);
       //DB.post("Rate", frameRate.toFixed(2));
       //context.fillText("fr   "+pacman.dirfr.toFixed(2) + "(" + pacman.locfr.x.toFixed(2) + " " + pacman.locfr.y.toFixed(2) + ")", -width/2, -height/2+30);
       //context.fillText("am "+pacman.diram.toFixed(2) + "(" + pacman.locam.x.toFixed(2) + " " + pacman.locam.y.toFixed(2) + ")", -width/2, -height/2+60);
@@ -1430,23 +1427,31 @@ function Main () {
       //context.fillText("go  "+pacman.dirgo,-width/2, -height/2+120);
     }
 
-    // Update server of my wareabouts.
-    if (socket.readyState && 0<uid && (last.d != avatar.dir || last.x != avatar.x || last.y != avatar.y)) {
+    // Update server of my wareabouts.  Throttle to 50ms?
+    if (nextTimeIPC <= currentTime &&
+        socket.readyState &&
+        0<=uid &&
+        (last.d != avatar.dir ||
+         last.x != avatar.x ||
+         last.y != avatar.y ||
+         last.z != avatar.z)) {
         //var b = Uint8Array.alloc(1+1+8+8+8);
         last.d = avatar.dir;
         last.x = avatar.x;
         last.y = avatar.y;
+        last.z = avatar.z;
 
-        //DB(`<< ${last.d} ${last.x} ${last.y}`);
 
-        var buff = new ArrayBuffer(13);
+        var buff = new ArrayBuffer(17);
         var db = new DataView(buff);
         db.setUint8(0, 1); // 1 is move
         db.setFloat32(1, last.d);
         db.setFloat32(5, last.x);
         db.setFloat32(9, last.y);
-        //DB("sending" + buff.byteLength + " bytes.");
+        db.setFloat32(13, last.z);
+        //DB(`<${buff.byteLength}< ${last.d} ${last.x} ${last.y}`);
         if (socket.readyState == socket.OPEN) { socket.send(buff); }
+        nextTimeIPC = currentTime + 50;
     }
 
     collision = false;
@@ -1513,13 +1518,11 @@ function Main () {
       if (e.button == 0) { spawnCannon(avatar); }
       if (e.button == 2) { avatar.jump(); }
     }
-    //gas = 1; // Start motion
   }
 
   var exitPointerLock = function () {
     document.body.onmousemove = null;
     document.body.onclick = null;
-    //gas = -1;
   };
 
   /* Locked mouse pointer state machine. The exit-pointer-lock state
@@ -1554,8 +1557,8 @@ function Main () {
       case Button_f :     gasWalkEast(1);  break;
       case Button_left :
       case Button_d :     gasWalkWest(1); break;
-      case Button_equals :  heightAdd(1); break;
-      case Button_minus : heightAdd(-1); break;
+      case Button_equals : heightAdd(1); break;
+      case Button_minus  : heightAdd(-1); break;
     }
   }
 
@@ -1594,7 +1597,7 @@ socket.onclose = function (event) {
 
 var players = []
 function spawnNewPlayer (uid) {
-  var player = {d:0, x:0, y:0, update:true};
+  var player = {d:0, x:0, y:0, z:0, update:true};
   players[uid] = player;
   //DB("spawned player" + uid);
   scene.push(
@@ -1603,7 +1606,7 @@ function spawnNewPlayer (uid) {
     .setAni( (pc, state) => {
       if (player.update) {
         //DB(`updating player ${player.d.toFixed(2)} ${player.x.toFixed(2)} ${player.y.toFixed(2)}`);
-        pc.setXform(tmatTrans(player.x/1, player.y/1, 0).tmatRotZ(-player.d))
+        pc.setXform(tmatTrans(player.x, player.y, player.z).tmatRotZ(-player.d))
         player.update = false;
       }
     })
@@ -1613,7 +1616,7 @@ function spawnNewPlayer (uid) {
 
 socket.onmessage = function (event) {
   var msg = event.data, player;
-  //DB.post("onmsg",  msg.length);
+  DB.post("onmsg",  msg.length);
   if (typeof msg == "string") { // String messages are just echoed to console.
     //DB.post("str", msg);
   } else if (msg instanceof ArrayBuffer) {
@@ -1635,6 +1638,7 @@ socket.onmessage = function (event) {
       player.d = dv.getFloat32(2);
       player.x = dv.getFloat32(6);
       player.y = dv.getFloat32(10);
+      player.z = dv.getFloat32(14);
       player.update = true;
       //DB(`>>${cmd}:${usr} ` + `${player.d.toFixed(2)} ${player.x.toFixed(2)} ${player.y.toFixed(2)}`);
       break
