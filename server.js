@@ -74,14 +74,14 @@ function Agent (s) { // id socket
   this.yeld    = false;
   this.add     = function () {
     Agents.push(this);
-    this.sock.write(Uint8Array.of(0x82, 0x02, 0, a.id), "binary") // BIN - Give client an ID
+    this.sock.write(Uint8Array.of(0x82, 0x02, 0, this.id), "binary") // BIN - Give client an ID
     this.sock.write("\x81\x18Welcome To JS3DArtillery", "binary") // TXT
     this.sock.write("\x89\x08Welcome!", "binary"); // PING
   }
   this.receiveBuffer = function (buff) {
     this.buffer = Buffer.concat([this.buffer, buff]);
     ++receiveCount;
-    DB(`${red}<${this.id} ${receiveCount} ${this.buffer.length}> ${util.inspect(this.buffer,{depth:1000})}${off}`);
+    DB(`${red}[${this.id} ${receiveCount} ${this.buffer.length}] ${util.inspect(this.buffer,{depth:1000})}${off}`);
     consume(this); // Attempt to consume buffer contents.
   }
 }
@@ -95,7 +95,7 @@ function Agent (s) { // id socket
 function consume (a) { // agent
   var msg;
   while (!a.yeld) {
-    DB(`${yellow}{${a.id} ${a.state} ${a.buffer.length}}${off}`);
+    DB(`${yellow}[${a.id} ${a.state} ${a.buffer.length}]${off}`);
     switch (a.state) {
     case 0: // READ HEADERS AND UPDATE WEBSOCKET PROTOCOL
       consumeHttpHeaders(a);
@@ -164,8 +164,8 @@ function bcastBinaryMsg (msg, aa) {
   // Re-send to all the agents.
   Agents.forEach ( (a) => {
     if (aa.id != a.id && a.sock.readyState == 'open') {
-      var buff = Buffer.concat([Uint8Array.of(0x82, msg.byteLength+1, 1, aa.id), msg.subarray(1)]);
-      DB(`${green}<${a.id}<-${aa.id} ${buff.length}< ${util.inspect(buff)}${off}`);
+      var buff = Buffer.concat([Uint8Array.of(0x82, msg.byteLength+1, msg[0], aa.id), msg.subarray(1)]);
+      DB(`${green}[${a.id}  ${aa.id} ${buff.length}] ${util.inspect(buff)}${off}`);
       a.sock.write(buff, "binary");
     }
   } );

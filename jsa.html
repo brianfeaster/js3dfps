@@ -1176,22 +1176,23 @@ function spawnObjectsFromMap () {
 /*******************************************************************************
  Create the new cannon at the location of the user's avatar/actor.
 *******************************************************************************/
-function spawnCannon (actor) {
+var ouchCount=0;
+function spawnCannon (actor, vel) {
   var loc = {x:actor.x, y:actor.y, z:actor.z+0.25, dir:actor.dir}; // fake Actor
-  var body = Body(Trajectory(loc, 8, -actor.azi, 10), currentTime); // grav ang vel
+  var body = Body(Trajectory(loc, 8, -actor.azi, vel), currentTime); // grav ang vel
   scene.push(pcGen("cannon", pmGen18gon())
-             .setXform(tmatScale(.1))
+             .setXform(tmatScale(.1)) // Shrink them to bullet size
              .setAni( (pc, state) => { // this polygroupCanvas, state current just {:time}
-
                if (loc.z <= 0.0) {
                  pc.leftMulXform(tmatTrans(loc.x, loc.y, 0.0).tmatRotZ(state.time/50));
-                } else {
+               } else {
                  loc = body.tick(state.time);
+                 if (actor.uid != avatar.uid &&
+                     distLocLoc(loc.x, loc.y, loc.z, avatar) < 1) {
+                   DB("ouch", ouchCount++);
+                 }
                  pc.leftMulXform(tmatTrans(loc.x, loc.y, loc.z).tmatRotZ(state.time/50));
-
                }} ));
-  // BF: IPC is still hacky.  Send 'fire' string to everyone for fun.
-  if (socket.readyState == socket.OPEN) { socket.send("fire"); }
 }
 
 
@@ -1295,6 +1296,50 @@ function genCameraTransform (actor) {
          .tmatTrans(-actor.x, -actor.y, -actor.z-elevation)
 }
 
+function ipcSendMyPosition () {
+  if (nextTimeIPC <= currentTime &&
+      socket.readyState &&
+      0 <= avatar.uid &&
+      (last.d != avatar.dir ||
+       last.x != avatar.x ||
+       last.y != avatar.y ||
+       last.z != avatar.z)) {
+    //var b = Uint8Array.alloc(1+1+8+8+8);
+    last.d = avatar.dir;
+    last.x = avatar.x;
+    last.y = avatar.y;
+    last.z = avatar.z;
+
+    var buff = new ArrayBuffer(17);
+    var db = new DataView(buff);
+    db.setUint8(0, 1); // 1 is move
+    db.setFloat32(1, last.d);
+    db.setFloat32(5, last.x);
+    db.setFloat32(9, last.y);
+    db.setFloat32(13, last.z);
+    //DB(`<${buff.byteLength}< ${last.d} ${last.x} ${last.y}`);
+    if (socket.readyState == socket.OPEN) { socket.send(buff); }
+    nextTimeIPC = currentTime + 50;
+  }
+}
+
+function ipcSendMyCannon (x, y, z, d, a, v) {
+  console.log(avatar.uid);
+  if ( (socket.readyState) && (0 <= avatar.uid) ) {
+
+    var buff = new ArrayBuffer(25); // Try Uint8Array([2,x,y,z,d]) ? BF TODO
+    var db = new DataView(buff);
+    db.setUint8(0, 2); // 2 is cannon
+    db.setFloat32(1, x)
+    db.setFloat32(5, y)
+    db.setFloat32(9, z)
+    db.setFloat32(13, d)
+    db.setFloat32(17, a)
+    db.setFloat32(21, v)
+    DB(`<${avatar.uid} ${buff.byteLength}< ${x.toFixed(2)} ${y.toFixed(2)} ${z.toFixed(2)} ${d.toFixed(2)} ${a.toFixed(2)} ${v.toFixed(2)}`);
+    if (socket.readyState == socket.OPEN) { socket.send(buff); }
+  }
+}
 
 /***************************************
   Globals
@@ -1307,7 +1352,6 @@ var collision = false;
 var scene = []; // Simple array of renderable object groups.
 var elevation = .5;
 var parentStyle = window.getComputedStyle(canvas.parentElement); // Adjust canvas size to parent's size
-var uid = -1;
 
 /***************************************
   Main
@@ -1428,31 +1472,7 @@ function Main () {
     }
 
     // Update server of my wareabouts.  Throttle to 50ms?
-    if (nextTimeIPC <= currentTime &&
-        socket.readyState &&
-        0<=uid &&
-        (last.d != avatar.dir ||
-         last.x != avatar.x ||
-         last.y != avatar.y ||
-         last.z != avatar.z)) {
-        //var b = Uint8Array.alloc(1+1+8+8+8);
-        last.d = avatar.dir;
-        last.x = avatar.x;
-        last.y = avatar.y;
-        last.z = avatar.z;
-
-
-        var buff = new ArrayBuffer(17);
-        var db = new DataView(buff);
-        db.setUint8(0, 1); // 1 is move
-        db.setFloat32(1, last.d);
-        db.setFloat32(5, last.x);
-        db.setFloat32(9, last.y);
-        db.setFloat32(13, last.z);
-        //DB(`<${buff.byteLength}< ${last.d} ${last.x} ${last.y}`);
-        if (socket.readyState == socket.OPEN) { socket.send(buff); }
-        nextTimeIPC = currentTime + 50;
-    }
+    ipcSendMyPosition();
 
     collision = false;
 
@@ -1515,7 +1535,10 @@ function Main () {
   var enterPointerLock = function () {
     mouseControlsLook();
     document.body.onclick = function (e) {
-      if (e.button == 0) { spawnCannon(avatar); }
+      if (e.button == 0) {
+        spawnCannon(avatar, 10); // velocity
+        ipcSendMyCannon(avatar.x, avatar.y, avatar.z+0.25, avatar.dir, avatar.azi, 10);
+      }
       if (e.button == 2) { avatar.jump(); }
     }
   }
@@ -1596,17 +1619,19 @@ socket.onclose = function (event) {
 }
 
 var players = []
+
 function spawnNewPlayer (uid) {
   var player = {d:0, x:0, y:0, z:0, update:true};
   players[uid] = player;
-  //DB("spawned player" + uid);
+  DB("spawned player" + uid);
   scene.push(
     pcGen("turret", pmGen18gon())
-    //.setXform(tmatTrans(0,0,0))
     .setAni( (pc, state) => {
       if (player.update) {
         //DB(`updating player ${player.d.toFixed(2)} ${player.x.toFixed(2)} ${player.y.toFixed(2)}`);
-        pc.setXform(tmatTrans(player.x, player.y, player.z).tmatRotZ(-player.d))
+        pc.setXform(tmatTrans(player.x, player.y, player.z)
+                    .tmatRotZ(-player.d)
+                    .tmatScale(.5))
         player.update = false;
       }
     })
@@ -1616,7 +1641,8 @@ function spawnNewPlayer (uid) {
 
 socket.onmessage = function (event) {
   var msg = event.data, player;
-  DB.post("onmsg",  msg.length);
+  var ca = new Int8Array(msg);
+  //DB.post("onmessage", ` msg.len=${msg.byteLength || msg.length} ${ca}`);
   if (typeof msg == "string") { // String messages are just echoed to console.
     //DB.post("str", msg);
   } else if (msg instanceof ArrayBuffer) {
@@ -1626,11 +1652,12 @@ socket.onmessage = function (event) {
     switch (cmd)  {
     case 0: // My new user ID from the server.
       // Create my entity / turret object.
-      uid = usr;
-      //DB(`>>${cmd}:${usr}`);
-      spawnNewPlayer(usr);
+      avatar.uid = usr;
+      //DB(`[${cmd} ${usr}] NEW ID`);
+      //spawnNewPlayer(usr);
       break;
     case 1:                      // User moved and/or rotated.  If new user, create him.
+      if (usr == avatar.uid) break;
       player = players[usr];
       if (!player) {
         player = spawnNewPlayer(usr);
@@ -1640,8 +1667,18 @@ socket.onmessage = function (event) {
       player.y = dv.getFloat32(10);
       player.z = dv.getFloat32(14);
       player.update = true;
-      //DB(`>>${cmd}:${usr} ` + `${player.d.toFixed(2)} ${player.x.toFixed(2)} ${player.y.toFixed(2)}`);
+      //DB(`[${cmd} ${usr}] ` + `${player.d.toFixed(2)} ${player.x.toFixed(2)} ${player.y.toFixed(2)}`);
       break
+    case 2:
+      if (usr == avatar.uid) break; // Ignore my own message to spawn my own bullet.
+      var x=dv.getFloat32(2),
+          y=dv.getFloat32(6),
+          z=dv.getFloat32(10),
+          d=dv.getFloat32(14),
+          a=dv.getFloat32(18),
+          v=dv.getFloat32(22);
+      spawnCannon ({x:x, y:y, z:z, dir:d, azi:a, uid:usr}, v);
+      //DB(`[${cmd} ${usr}] ` + `${x.toFixed(2)} ${y.toFixed(2)} ${z.toFixed(2)} ${d.toFixed(2)} ${a.toFixed(2)} ${v.toFixed(2)}`);
     }
   } else {
     DB(`[???] ${typeof msg} ${msg}`);
