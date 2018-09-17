@@ -8,7 +8,7 @@
 
 <body id="pcanvas">
   <canvas id="mycanvas"></canvas>
-  <p id="DB" style="position:fixed; right:0; bottom:0; width:20em; max-height:20em; background:#0f01; overflow:auto; white-space:pre"></p>
+  <p id="DB" style="position:fixed; font-family:monospace; right:0; bottom:0; width:20em; max-height:20em; background:#0f01; overflow:auto; white-space:pre"></p>
 </body><script>
 "use strict";
 
@@ -187,6 +187,10 @@ Object.prototype.stringify = function () {
 Array.prototype.dumpMat = function () {
   console.log(this.map(n=>("     "+n.toFixed(2)).slice(-8)).groupby(4).map(JSON.stringify).join('\n').replace(/"/g,'').replace(/,/g,' '));
   return this;
+}
+
+Object.prototype.length = function () {
+  return Object.keys(this).length;
 }
 
 // In 3D land, radians are king and used often but I'm used to degrees thus these constants.
@@ -720,21 +724,58 @@ var pmGenGhost = function () {
 }
 
 
-function hexToRgb (str) { // "f00f" => {r:255, g:0, b:0, a:1.0}
-  var r,g,b,a;
-  r = parseInt(str.charAt(0), 16)*17;
-  g = parseInt(str.charAt(1), 16)*17;
-  b = parseInt(str.charAt(2), 16)*17;
-  a = parseInt(str.charAt(3), 16)/15;
-  return {r:r, g:g, b:b, a:isNaN(a)?1:a};
-}
+/* Caching RGBA object and CSS string converter:  "f00f" => {r:255, g:0, b:0, a:1.0}
+*/
+var Rgb = (function () {
+  var cacheRgb = {};
 
-function pmNormalizeFace (face) {
-  face.fill = hexToRgb(face.fill);
-  face.edge = hexToRgb(face.edge);
-  face.edgeStr = `rgba(${face.edge.r},${face.edge.g},${face.edge.b},${face.edge.a})`;
+  var cons = function (rgba) {
+    var v = cacheRgb[rgba];
+    if ( v ) {  // Return the object if cached.
+      //DB.post("cache hit", `${rgba.length} ${rgba}`); 
+      return v;
+    } else {
+      //DB.post(`cache add ${rgba}`, cacheRgb.length()); 
+    }
+
+    var r = parseInt(rgba.charAt(0), 16)*17;
+    var g = parseInt(rgba.charAt(1), 16)*17;
+    var b = parseInt(rgba.charAt(2), 16)*17;
+    var a = parseInt(rgba.charAt(3), 16)/15 || 1
+
+    var self = cacheRgb[rgba] = {rgba:rgba}
+
+    self.cssStr = function (n) {
+      var nc = Math.ceil(n*100);
+      var v = self[nc];
+      if ( v ) {
+        //DB.post("hit", `${cacheRgb.length()} ${self.length()} ${rgba}[${nc}]`);
+        return v;
+      } else {
+        //console.log(`${cacheRgb.length()} ${self.length()} ${rgba}[${nc}]`);
+        return self[nc] = `rgba(${(n*r)|0},${(n*g)|0},${(n*b)|0},${a.toFixed(2)})`;
+      }
+    }
+    self.cache = function () { return cacheRgb; }
+    return self;
+  }
+
+  cons.log = function () { return Object.getOwnPropertyNames(cacheRgb).forEach( (k,v,o) => {
+    var v = cacheRgb[k];
+    console.log(` ${v.rgba} ${v.length()}`);
+  } )};
+
+  cons.cache = cacheRgb;
+  return cons; // Return the constructor
+})();
+
+
+var pmNormalizeFace = function (face) {
+  face.fill = Rgb(face.fill);
+  face.edge = Rgb(face.edge);
   return face;
-}
+};
+
 
 
 /*******************************************************************************
@@ -1174,7 +1215,7 @@ function spawnObjectsFromMap () {
 
 
 /*******************************************************************************
- Create the new cannon at the location of the user's avatar/actor.
+ Create the new cannon projectile at the location of the user's avatar/actor.
 *******************************************************************************/
 var ouchCount=0;
 function spawnCannon (actor, vel) {
@@ -1187,17 +1228,34 @@ function spawnCannon (actor, vel) {
                  pc.leftMulXform(tmatTrans(loc.x, loc.y, 0.0).tmatRotZ(state.time/50));
                } else {
                  loc = body.tick(state.time);
+                 // Is this projectile somenoe elses and is it close to me?
                  if (actor.uid != avatar.uid &&
                      distLocLoc(loc.x, loc.y, loc.z, avatar) < 1) {
-                   DB("ouch", ouchCount++);
+                   DB(`Ouch from ${actor.uid}`, ouchCount++);
                  }
                  pc.leftMulXform(tmatTrans(loc.x, loc.y, loc.z).tmatRotZ(state.time/50));
                }} ));
 }
 
 
-/* Spawn Actor representing user controlled avatar and camera viewpoint.
-*/
+/*******************************************************************************
+  Create an Actor representing a dynamic controllable entity.
+
+  {points: [x y z ...]
+   faces:  [{label:"top"  fill:"a00f"  edge:"f00f"  face:[1 3 4 ...]} ...] }
+
+  =>
+
+  {label:   "box"
+   points:  [1 -2 2  ...]
+   center:  [-.5  .5  .5]
+   faces:   [{label:"top"  fill:{r:148 g:0 b:0 a:1.0}  edge:{r:255 g:0 b:0 a:1.0}  faces:[1 3 4 ...]} ...]}
+   xform:   [1 0 0 0  0 1 0 0  0 0 1 0  0 0 0 1]
+   tcenter: null
+   tpoints: null
+   txform:  null }
+    
+*******************************************************************************/
 var gas = [0,0,0,0]; // Literally the gas pedal in the North South East West directions
 function gasWalkNorth(v) { gas[0] = v; }
 function gasWalkSouth(v) { gas[1] = v; }
@@ -1227,7 +1285,7 @@ function Actor (x, y, z, dir, azi) {
   };
   self.jump = function () {
     if (jumper) return;
-    jumper = Body(Trajectory(self, 5, -avatar.azi, 20), currentTime); // grav ang vel
+    jumper = Body(Trajectory(self, 5, -avatar.azi, 10), currentTime); // grav ang vel
     return self;
   };
   self.dump = function () {
@@ -1240,6 +1298,9 @@ function Actor (x, y, z, dir, azi) {
 
 var avatar = null;
 
+/* Spawn the user's Actor represented by the user's controllable avatar.  It's also used
+   as the camera viewpoint.
+*/
 function spawnAvatar (x, y, z, d, a) {
   avatar = Actor(x, y, z, d, a);
   return pcGen("avatar", pmGen18gon())
@@ -1272,14 +1333,15 @@ function spawnGhost (x, y) {
 function spawnThunderDome () {
   var a;
   /* A perimeter of towers*/
-  for (a=0; a<5000; a+=8) {
+  for (a=0; a<4000; a+=8) {
     scene.push(
       pcGen("dome", pmGenCubeRainbow())
-      .setXform(tmatRotZ(a*PI1)
-                .tmatRotX(a*PI1/90)
+      .setXform(tmatTrans(30, 30, 0)
+                .tmatRotZ(a*PI1)
+                .tmatRotX(a*PI1/60)
                 .tmatTrans(0, 100, 0)
-                .tmatRotY(a*PI1)
-                .tmatScale(5,5,5))
+                .tmatScale(5)
+               )
       .setAni( (pc, state) =>
         pc.rightMulXform(tmatRotZ(currentTime/20*PI1)
                          .tmatRotY(currentTime/10*PI1)
@@ -1336,7 +1398,7 @@ function ipcSendMyCannon (x, y, z, d, a, v) {
     db.setFloat32(13, d)
     db.setFloat32(17, a)
     db.setFloat32(21, v)
-    DB(`<${avatar.uid} ${buff.byteLength}< ${x.toFixed(2)} ${y.toFixed(2)} ${z.toFixed(2)} ${d.toFixed(2)} ${a.toFixed(2)} ${v.toFixed(2)}`);
+    //DB(`<${avatar.uid} ${buff.byteLength}< ${x.toFixed(2)} ${y.toFixed(2)} ${z.toFixed(2)} ${d.toFixed(2)} ${a.toFixed(2)} ${v.toFixed(2)}`);
     if (socket.readyState == socket.OPEN) { socket.send(buff); }
   }
 }
@@ -1393,13 +1455,15 @@ function Main () {
       }
     } );
 
+    if (clear) { clearContext(width, height);  clear = 0; }
+
     // Sort all objects, along y, then transform each vertex with their xfrom matrix, then plot.
     sortedVisibleScene
     .sort( (a,b) => b.getCenter()[1] - a.getCenter()[1] )
     .forEach ( (pg) => {
       pg.xformPoints();
       if (pgPerspective(pg.getPoints(), 400)) return; // skips if any point is behind camera
-      pgScale(pg.getPoints(), 1, 200, 1); // Stretch along y-axis so normal calculations are more sane
+      pgScale(pg.getPoints(), 1, 50, 1); // Stretch along y-axis so normal calculations are more sane
       var points = pg.getPoints();
       pg.getFaces().forEach ( (face) => {
         var indices = face.face;
@@ -1413,37 +1477,32 @@ function Main () {
 
         if (theNormal[1] <=0) { return; }
 
+        // Draw the first three points then the rest of the points
         context.beginPath()
         context.moveTo(v0[0], -v0[2]);
         context.lineTo(v1[0], -v1[2]);
         context.lineTo(v2[0], -v2[2]);
-
-        // Draw the rest of the points
         for (var i=3; i<indices.length; ++i) {
           i0 = indices[i]*4;
           v0 = points.slice(i0,i0+3);
           context.lineTo(v0[0], -v0[2]);
         }
 
-        // Render filled area
+        // Normal computation for face hilight.
         var nx = theNormal[0];
         var ny = theNormal[1];
         var nz = theNormal[2];
         var r = Math.sqrt(nz*nz + ny*ny + nx*nx);
         ny = ny / r; // Normalize the normal's y component
-        var fillStyle ="rgba(" + ((ny * face.fill.r) | 0) + "," + // x.round == x|0
-                                 ((ny * face.fill.g) | 0) + "," +
-                                 ((ny * face.fill.b) | 0) + "," +
-                                 (face.fill.a) + ")";
 
-        if (clear) { clearContext(width, height);  clear = 0; }
+        // Render filled area
 
-        context.fillStyle = fillStyle;
+        context.fillStyle = face.fill.cssStr(ny);
         context.fill();
 
         // Outline the faces
         context.closePath();
-        context.strokeStyle = face.edgeStr;
+        context.strokeStyle = face.edge.cssStr(1);
         context.lineWidth = "1"; // Adjust outline width thicker when closer to camera.
         context.stroke();
 
@@ -1653,7 +1712,7 @@ socket.onmessage = function (event) {
     case 0: // My new user ID from the server.
       // Create my entity / turret object.
       avatar.uid = usr;
-      //DB(`[${cmd} ${usr}] NEW ID`);
+      DB(`[${cmd} ${usr}] NEW ID`);
       //spawnNewPlayer(usr);
       break;
     case 1:                      // User moved and/or rotated.  If new user, create him.
