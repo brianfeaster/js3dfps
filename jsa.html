@@ -164,6 +164,7 @@ var abs = Math.abs;
 var square = function (x) {return x*x;}
 var getTime = function () { return (new Date).getTime(); }
 var eqpair = function (a, b) {return a.x==b.x && a.y==b.y;}
+var pi = Math.PI;
 
 Object.prototype.setxyz = function (o) {
   this.x = o.x;
@@ -304,9 +305,10 @@ function Trajectory (actor, gravity, ang, vel) {
   var vy  = (vh * cos(dir)); // Hor.y
   var vx  = (vh * sin(dir)); // Hor.x
   var vv  = (vel * sin(ang)); // Vertical
-  var f = (t) => ({x: vx*t + x,
-                   y: vy*t + y,
-                   z: acc*t*t + vv*t + z})
+  var f = (t) => ({x: x + vx*t,
+                   y: y + vy*t,
+                   z: z + acc*t*t + vv*t,
+                   azi: Math.atan( (2*acc*t + vv) / (vh) )})
   f.actor = actor;
   return f;
 }
@@ -735,7 +737,7 @@ var Rgb = (function () {
       //DB.post("cache hit", `${rgba.length} ${rgba}`); 
       return v;
     } else {
-      //DB.post(`cache add ${rgba}`, cacheRgb.length()); 
+      //console.log(`cache add ${rgba}`, cacheRgb.length()); 
     }
 
     var r = parseInt(rgba.charAt(0), 16)*17;
@@ -752,8 +754,9 @@ var Rgb = (function () {
         //DB.post("hit", `${cacheRgb.length()} ${self.length()} ${rgba}[${nc}]`);
         return v;
       } else {
-        //console.log(`${cacheRgb.length()} ${self.length()} ${rgba}[${nc}]`);
-        return self[nc] = `rgba(${(n*r)|0},${(n*g)|0},${(n*b)|0},${a.toFixed(2)})`;
+        v = self[nc] = `rgba(${(n*r)|0},${(n*g)|0},${(n*b)|0},${a.toFixed(2)})`;
+        //console.log(`${cacheRgb.length()} ${self.length()} ${rgba}[${nc}] ${v}`);
+        return v;
       }
     }
     self.cache = function () { return cacheRgb; }
@@ -798,7 +801,7 @@ var pmNormalizeFace = function (face) {
 *******************************************************************************/
 function pcGen (label, pm) {
   // Static Fields
-  var self = {pg:true, label:label};//Use the label string as the object.  Why not?
+  var self = {label:label};//Use the label string as the object.  Why not?
   var points = pm.points;
   var count = points.length/3;
   var faces = pm.faces.map(pmNormalizeFace);
@@ -1217,21 +1220,38 @@ function spawnObjectsFromMap () {
 /*******************************************************************************
  Create the new cannon projectile at the location of the user's avatar/actor.
 *******************************************************************************/
+var mya
 var ouchCount=0;
 function spawnCannon (actor, vel) {
-  var loc = {x:actor.x, y:actor.y, z:actor.z+0.25, dir:actor.dir}; // fake Actor
+  mya = actor;
+  var bounces = 7;
+  var dir = actor.dir;
+  var azi;
+  var loc = {x:actor.x, y:actor.y, z:actor.z+0.0, dir:dir}; // fake Actor
   var body = Body(Trajectory(loc, 8, -actor.azi, vel), currentTime); // grav ang vel
   scene.push(pcGen("cannon", pmGen18gon())
              .setXform(tmatScale(.1)) // Shrink them to bullet size
              .setAni( (pc, state) => { // this polygroupCanvas, state current just {:time}
-               if (loc.z <= 0.0) {
-                 pc.leftMulXform(tmatTrans(loc.x, loc.y, 0.0).tmatRotZ(state.time/50));
+               if (loc.z < 0.0) {
+
+                 if (0 < bounces--) {
+                   azi = -loc.azi;
+                   loc = {x:loc.x, y:loc.y, z:0.0, dir:dir}; // fake Actor
+                   body = Body(Trajectory(loc, 8, azi, vel*=.8), currentTime); // grav ang vel
+                 } else {
+                   pc.leftMulXform(tmatTrans(loc.x, loc.y, 0.0).tmatRotZ(state.time/50));
+                   return;
+                 }
+
                } else {
                  loc = body.tick(state.time);
                  // Is this projectile somenoe elses and is it close to me?
                  if (actor.uid != avatar.uid &&
                      distLocLoc(loc.x, loc.y, loc.z, avatar) < 1) {
                    DB(`Ouch from ${actor.uid}`, ouchCount++);
+                   avatar.x = avatar.ox; // Set my avatar location back to home.
+                   avatar.y = avatar.oy;
+                   avatar.z = avatar.oz;
                  }
                  pc.leftMulXform(tmatTrans(loc.x, loc.y, loc.z).tmatRotZ(state.time/50));
                }} ));
@@ -1303,6 +1323,9 @@ var avatar = null;
 */
 function spawnAvatar (x, y, z, d, a) {
   avatar = Actor(x, y, z, d, a);
+  avatar.ox = x;
+  avatar.oy = y;
+  avatar.oz = z;
   return pcGen("avatar", pmGen18gon())
          .setXform(tmatScale(.5))
          .setAni( (pc, state) => { // this polygroupCanvas, state current just {:time}
@@ -1315,9 +1338,8 @@ function spawnAvatar (x, y, z, d, a) {
  Create a new Ghost object/actor.
 ***************************************/
 function spawnGhost (x, y) {
-  let e = new Entity("ghost", [x, y, 0.5], 4); // BF Entity to be refactored into Actor
+  let e = new Entity("ghost", [x, y, 0.5], 4); // BF TODO Entity to be refactored into Actor
   return pcGen("ghost", pmGenGhost())
-         .setXform(tmatRotZ(PI180)) // ghost is rotated
          .setAni((pc, state) => {
            e.tick(currentTime);
            pc.leftMulXform(tmatTrans(e.locam.x, e.locam.y, 0)
@@ -1502,7 +1524,7 @@ function Main () {
 
         // Outline the faces
         context.closePath();
-        context.strokeStyle = face.edge.cssStr(1);
+        context.strokeStyle = face.edge.cssStr(.5); // ny
         context.lineWidth = "1"; // Adjust outline width thicker when closer to camera.
         context.stroke();
 
