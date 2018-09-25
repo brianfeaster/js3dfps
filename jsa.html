@@ -34,7 +34,7 @@ starsr.src="starsr.jpg";
     DB.check(expr, string) -- If expr is false, send string to console.  status() will then always return false.
     DB.status()            -- Returns false if check ever failed.
 ******************************************************************************/
-var DB = (function () {
+const DB = (function () {
   var consoleElement = document.getElementById('DB');
   var self;
   var status = true;
@@ -160,18 +160,54 @@ var rnd  = function(n){return Math.floor(Math.random()*n);}
 var rndf = function(n){return Math.random()*n;}
 var sin = Math.sin;
 var cos = Math.cos;
+var atan = Math.atan;
 var abs = Math.abs;
 var square = function (x) {return x*x;}
 var getTime = function () { return (new Date).getTime(); }
 var eqpair = function (a, b) {return a.x==b.x && a.y==b.y;}
 var pi = Math.PI;
 
-Object.prototype.setxyz = function (o) {
+Object.prototype.setxyz = function (xo, y, z) {
+  if (arguments.length == 3) {
+    this.x = xo;
+    this.y = y;
+    this.z = z;
+  } else {
+    this.x = xo.x;
+    this.y = xo.y;
+    this.z = xo.z;
+  }
+  return this;
+}
+
+Object.prototype.setxyzd = function (o) {
   this.x = o.x;
   this.y = o.y;
   this.z = o.z;
+  this.dir = o.dir;
   return this;
 }
+
+Object.prototype.setxyzda = function (o) {
+  this.x = o.x;
+  this.y = o.y;
+  this.z = o.z;
+  this.dir = o.dir;
+  this.azi = o.azi;
+  return this;
+}
+
+Object.prototype.distxyz = function (loc) {
+  return Math.sqrt(square(this.x - loc.x) +
+                   square(this.y - loc.y) +
+                   square(this.z - loc.z));
+}
+
+Array.prototype.dist = function (o) {
+  return square(this[0] - o[0]) +
+         square(this[1] - o[1]) +
+         square(this[2] - o[2]);
+};
 
 Array.prototype.groupby = function (l) { // Group a vector into length l sub vectors.
   return this.reduce( (r,v,i,a) => (i%l || r.push(a.slice(i,i+l)), r), []);
@@ -208,7 +244,11 @@ var PI270 = 4.71238898038469
 var PI315 = 5.497787143782138
 var PI360 = 6.283185307179586
 
-// Keep track and setup pertinent canvas values.
+
+
+/*******************************************************************************
+ Canvas
+*******************************************************************************/
 var canvas = document.getElementsByTagName('canvas')[0];
 var context = canvas.getContext('2d');
 var width = canvas.width = document.body.clientWidth;
@@ -278,40 +318,6 @@ function Ticker () {
 }());
 //******************************************************************************
 
-
-
-/**************************************************************
- Parameterized object interface thingy.  This to become Actor?
-**************************************************************/
-function Body (pf, start=getTime()) { // parameterized function
-  self = function (time=getTime()) {
-    return pf((time - start)/1000.0);
-  };
-  self.tick = self;
-  self.actor = pf.actor;
-  return self;
-}
-
-
-/* TODO: Get fancy with this and formulate the 1st derivitave so I can compute the slop and thus new angle during a bounce.
-*/
-function Trajectory (actor, gravity, ang, vel) {
-  var x = actor.x;
-  var y = actor.y;
-  var z = actor.z;
-  var dir = actor.dir;
-  var acc = (gravity / -2.0);
-  var vh  = (vel * cos(ang)); // Horizontal
-  var vy  = (vh * cos(dir)); // Hor.y
-  var vx  = (vh * sin(dir)); // Hor.x
-  var vv  = (vel * sin(ang)); // Vertical
-  var f = (t) => ({x: x + vx*t,
-                   y: y + vy*t,
-                   z: z + acc*t*t + vv*t,
-                   azi: Math.atan( (2*acc*t + vv) / (vh) )})
-  f.actor = actor;
-  return f;
-}
 
 
 /***************************************
@@ -560,7 +566,7 @@ function Entity (label, aryam, dir0) {
 
 
 /*******************************************************************************
- 3D Polygonal Convex Surface Models = PM
+ PM - Polygonal Convex Surface Models
 
   * Unit volume between z [-.5 .5] or [0 1] and x/y [-.5 .5]
 *******************************************************************************/
@@ -782,7 +788,9 @@ var pmNormalizeFace = function (face) {
 
 
 /*******************************************************************************
-  Create a Polygonal Convex Surface Canvas (PC) from a PM
+  Create a PG: PolyGonal convex surface canvas.
+
+  Requires:  label, PM.
 
   {points: [x y z ...]
    faces:  [{label:"top"  fill:"a00f"  edge:"f00f"  face:[1 3 4 ...]} ...] }
@@ -796,28 +804,30 @@ var pmNormalizeFace = function (face) {
    xform:   [1 0 0 0  0 1 0 0  0 0 1 0  0 0 0 1]
    tcenter: null
    tpoints: null
-   txform:  null }
+   txform:  null
+   actor: null
+  }
     
 *******************************************************************************/
-function pcGen (label, pm) {
+function pgGen (label, pm) {
   // Static Fields
-  var self = {label:label};//Use the label string as the object.  Why not?
+  var self = {label:label};
   var points = pm.points;
   var count = points.length/3;
   var faces = pm.faces.map(pmNormalizeFace);
   var center = pm.points.reduce( (r,v,i) => (r[i%3]+=v, r), [0,0,0] ).map( v => v/count ); // Append new average-point to points.
+  // Mutable from the outside.
   var xform = null; // Base transform.  The seed transform, if any.
-  var animator = null; // Callback which usually will update the per-frame temporary-xform below.
-
-  // Mutable temporary vars.  The transformation "canvas".
-  var txform = [];
+  var actor = null; // Actor object that's passed this PC every tick and should update xform.
+  // Local temporary vars.  The transformation "canvas".
   var tcenter = [];
   var tpoints = [];
+  var txform =  [];
 
   // Methods
 
-  self.setAni = function (ani) { animator = ani; return self; }
-  self.tick = function (state) { animator && animator(self, state); return self; }
+  self.setActor = function (a) { actor = a; return self; }
+  self.act      = function (state) { actor && actor(self, state); return self; }
 
   self.reset = function () { // Reset canvas
     txform = null;
@@ -831,23 +841,19 @@ function pcGen (label, pm) {
   //    xf * xform => txform  or  xf => txform
   self.leftMulXform = function (xf) {
     if (!xf) { return self; }
-    var lxf = txform || xform; // Use the temporary xform, or base xform.
+    var lxf = txform || xform; // Use the temporary xform, or copy of base xform.
     txform = (lxf ? tmatMulTmat(xf, lxf) : xf.slice(0));
     return self;
   }
   self.rightMulXform = function (xf) {
     if (!xf) { return self; }
-    var lxf = txform || xform; // Use the crrent temporary xform, or base xform.
+    var lxf = txform || xform; // Use the crrent temporary xform, or copy of base xform.
     txform = (lxf ? tmatMulTmat(lxf, xf) : xf.slice(0));
     return self;
   }
 
   self.xformCenter = function () {
-    if (txform) {
-      tcenter = txform.tmatMulPoints(center);
-    } else {
-      tcenter = txform.tmatMulPoints(center);
-    }
+    tcenter = txform.tmatMulPoints(center);
     return self;
   }
 
@@ -862,6 +868,7 @@ function pcGen (label, pm) {
   self.getPoints = function () {
     return tpoints;
   }
+
   self.getFaces = function () { return faces; }
 
   self.dump = function () {
@@ -876,14 +883,6 @@ function pcGen (label, pm) {
 
   return self;
 };
-
-
-
-function distLocLoc(x,y,z, locb) {
-  return Math.sqrt(square(x - locb.x) +
-                   square(y - locb.y) +
-                   square(z - locb.z));
-}
 
 
 function pgScale (points, a, b, c) {
@@ -905,7 +904,7 @@ function pgPerspective (vectors, per) {
    var p = per / y;
    vectors[i+0] = x * p;
    vectors[i+2] = z * p;
-   if (y < 0 ) skip = true;
+   if (y <= 0 ) skip = true;
   }
   return skip;
 }
@@ -1096,17 +1095,6 @@ var arena = [
 "| |                                                          | |",
 " T                                                            T ",
 "| |                                                          | |",
-"                               g                                ",
-"                                                                ",
-"                               g                                ",
-"                                                                ",
-"                               g                                ",
-"                                                                ",
-"                               g                                ",
-"                                                                ",
-"                               g                                ",
-"                                                                ",
-"                               g                                ",
 "                                                                ",
 "                                                                ",
 "                                                                ",
@@ -1120,13 +1108,7 @@ var arena = [
 "                                                                ",
 "                                                                ",
 "                                                                ",
-"                                                                ",
-"                                                                ",
-"                                                                ",
-"| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | ",//
-" /   /   /   /   /   /   /   /   /   /   /   /   /   /   /   /  ",
-"   /   /   /   /   /   /   /   /   /   /   /   /   /   /   /   /",
-"| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | ",//
+"                       g g g g g g g g g                        ",
 "                                                                ",
 "                                                                ",
 "                                                                ",
@@ -1140,8 +1122,25 @@ var arena = [
 "                                                                ",
 "                                                                ",
 "                                                                ",
+"/                                                              /",//
 "                                                                ",
-"                           g g g g g                            ",
+"                                                                ",
+"/                                                              /",//
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                       g g g g g g g g g                        ",
+"                                                                ",
 "                                                                ",
 "                                                                ",
 "                                                                ",
@@ -1165,30 +1164,36 @@ var mapIsPill  = function (x, y) { return mapWithin(x,y) && 1 == arena[y|0][x|0]
 /* Create all objects that make up scene (the maze) and set their starting positions
 */
 function spawnObjectsFromMap () {
-  var ax, ay;
   arena.forEach( (row, y) => {
       for (var x=0; (x < row.length); ++x) {
+        var i;
         switch (row[x]) {
           case 1 : {
-            //scene.push(pcGen("floor", pmGenFloor()).setXform(tmatTrans(x,y,0)))
+            //scene.push(pgGen("floor", pmGenFloor()).setXform(tmatTrans(x,y,0)))
             break;
           }
-          case " " :
-            if (rnd(64) == 0) {
-              scene.push(pcGen("gravel", pmGenCubeRGB())
-                         .setXform(tmatTrans(x,y,0).tmatScale(1).tmatTrans(0,0,.5))
-                         .setAni( (pc, state) => {
-                           pc.rightMulXform(tmatRotZ(state.time/1000))
-                         } ));
+          case " " : if (!rnd(60)) {
+            i = rnd(20);
+            while (0 < i--) {
+              let ii = i;
+              scene.push(pgGen("gravel", pmGenCubeRGB())
+                         .setXform(tmatTrans(x,y,i).tmatScale(1).tmatTrans(0,0,.5))
+                         .setActor( (pg, state) => { pg.rightMulXform(tmatRotZ((ii*200+state.time)/(1000))) } )
+                        );
             }
-            break;
+          } else if (!rnd(40)) {
+            //scene.push(pgGen("maze", pmGenCubeRainbow()).setXform(tmatTrans(x,y,0).tmatScale(1,1,9).tmatTrans(0,0,.5)));
+          } else if (!rnd(40)) {
+            //scene.push(pgGen("wall", pmGenCubeSolid()).setXform(tmatTrans(x,y,0).tmatScale(1,1,5).tmatTrans(0,0,.5)));
+          }
+          break;
           case "x" : { // road
-            scene.push(pcGen("floor", pmGenFloor(0.5, "800f", "f00f"))
+            scene.push(pgGen("floor", pmGenFloor(0.5, "0481", "08ff"))
                        .setXform(tmatTrans(x,y,0)))
             break;
           }
           case "A" : { // special case for user's avatar
-            scene.push(spawnAvatar(ax=x, ay=y, 0, PI0, -PI10));
+            scene.push(spawnAvatar(x, y, 0, PI0, -PI10));
             break;
           }
           case "g" : { // special case for ghost
@@ -1196,18 +1201,18 @@ function spawnObjectsFromMap () {
             break;
           }
           case "T" : {
-            scene.push(pcGen("iotower", pmGenPyramidSolid(0.5, "f00f", "800f")).setXform(tmatTrans(x,y,0).tmatScale(1,1,100)));
+            scene.push(pgGen("iotower", pmGenPyramidSolid(0.5, "f00f", "800f")).setXform(tmatTrans(x,y,0).tmatScale(1,1,100)));
             break;
           }
-          case "p" : { // turrent (the player AKA pacman AKA the cannon/turret)  For now the fake opponent
+          case "p" : { // turrent (the player AKA pacman AKA the cannon/opponent)  For now the fake opponent
             break;
           }
           case "/" : {
-            scene.push(pcGen("maze", pmGenCubeRainbow()).setXform(tmatTrans(x,y,0).tmatScale(1,1,9).tmatTrans(0,0,.5)));
+            scene.push(pgGen("maze", pmGenCubeRainbow()).setXform(tmatTrans(x,y,0).tmatScale(1,1,9).tmatTrans(0,0,.5)));
             break;
           }
           case "|" : { // outer wall
-            scene.push(pcGen("wall", pmGenCubeSolid()).setXform(tmatTrans(x,y,0).tmatScale(1,1,5).tmatTrans(0,0,.5)));
+            scene.push(pgGen("wall", pmGenCubeSolid()).setXform(tmatTrans(x,y,0).tmatScale(1,1,5).tmatTrans(0,0,.5)));
             break;
           }
         } // switch
@@ -1215,165 +1220,253 @@ function spawnObjectsFromMap () {
   } );
 } // spawnObjectsFromMap()
 
-
-
-/*******************************************************************************
- Create the new cannon projectile at the location of the user's avatar/actor.
-*******************************************************************************/
-var mya
-var ouchCount=0;
-function spawnCannon (actor, vel) {
-  mya = actor;
-  var bounces = 7;
-  var dir = actor.dir;
-  var azi;
-  var loc = {x:actor.x, y:actor.y, z:actor.z+0.0, dir:dir}; // fake Actor
-  var body = Body(Trajectory(loc, 8, -actor.azi, vel), currentTime); // grav ang vel
-  scene.push(pcGen("cannon", pmGen18gon())
-             .setXform(tmatScale(.1)) // Shrink them to bullet size
-             .setAni( (pc, state) => { // this polygroupCanvas, state current just {:time}
-               if (loc.z < 0.0) {
-
-                 if (0 < bounces--) {
-                   azi = -loc.azi;
-                   loc = {x:loc.x, y:loc.y, z:0.0, dir:dir}; // fake Actor
-                   body = Body(Trajectory(loc, 8, azi, vel*=.8), currentTime); // grav ang vel
-                 } else {
-                   pc.leftMulXform(tmatTrans(loc.x, loc.y, 0.0).tmatRotZ(state.time/50));
-                   return;
-                 }
-
-               } else {
-                 loc = body.tick(state.time);
-                 // Is this projectile somenoe elses and is it close to me?
-                 if (actor.uid != avatar.uid &&
-                     distLocLoc(loc.x, loc.y, loc.z, avatar) < 1) {
-                   DB(`Ouch from ${actor.uid}`, ouchCount++);
-                   avatar.x = avatar.ox; // Set my avatar location back to home.
-                   avatar.y = avatar.oy;
-                   avatar.z = avatar.oz;
-                 }
-                 pc.leftMulXform(tmatTrans(loc.x, loc.y, loc.z).tmatRotZ(state.time/50));
-               }} ));
+function spawnAllObjects () {
+  spawnObjectsFromMap();
+  //spawnThunderDome();
 }
 
+/**************************************************************
+ Time-parameterized functions that return a bare actor blob.
+**************************************************************/
+
+function actionBouncingTrajectory (actor, velocity, gravity, start=getTime(), bounces=0) {
+  var reset = function (x, y, z, dir, azi, vel, start) {
+    var acc=gravity/-2; // State of the function.
+    var vh  = (vel * cos(-azi)); // Horizontal
+    var vy  = (vh * cos(dir)); // Hor.y
+    var vx  = (vh * sin(dir)); // Hor.x
+    var vv  = (vel * sin(-azi)); // Vertical
+    var l = {x:x, y:y, z:z};
+    return (time) => {
+      var t = (time-start)/1000.0;
+      var nx = x + vx*t;
+      var ny = y + vy*t;
+      var nz = z + acc*t*t + vv*t;
+      var r = {x:nx, y:ny, z:nz, dx:nx-l.x, dy:ny-l.y, dz:nz-l.z}; // Return the x y z as well as their deltas.
+      if (nz < 0.0) {
+        // Snap back to z=0
+        r.z=0;
+        r.dz = 0-l.z;
+        if (0 < --bounces) {
+          fn = reset(r.x, r.y, r.z, dir, atan((2*acc*t + vv)/vh), vel*0.8, time);
+        } else {
+          r.done = true;
+        }
+      }
+      l = r;
+      return r;
+    };
+  }
+  var fn = reset(actor.x, actor.y, actor.z, actor.dir, actor.azi, velocity, start);
+  return (t=getTime()) => fn(t);
+};
+
+
 
 /*******************************************************************************
-  Create an Actor representing a dynamic controllable entity.
+  Create Actors representing a dynamic and/or controllable entity in a 3D world.
 
-  {points: [x y z ...]
-   faces:  [{label:"top"  fill:"a00f"  edge:"f00f"  face:[1 3 4 ...]} ...] }
-
-  =>
-
-  {label:   "box"
-   points:  [1 -2 2  ...]
-   center:  [-.5  .5  .5]
-   faces:   [{label:"top"  fill:{r:148 g:0 b:0 a:1.0}  edge:{r:255 g:0 b:0 a:1.0}  faces:[1 3 4 ...]} ...]}
-   xform:   [1 0 0 0  0 1 0 0  0 0 1 0  0 0 0 1]
-   tcenter: null
-   tpoints: null
-   txform:  null }
-    
+  Minimal state: x y z direction azimuth original-location
+  Returns: A function taking a PG and map.  The map just contains the
+           current time {time:} and updates the PG's xform matrix. 
 *******************************************************************************/
-var gas = [0,0,0,0]; // Literally the gas pedal in the North South East West directions
+
+var gas = [0,0,0,0]; // Literally the gas pedal in the North South East West directions.  Set these to move in those directions.
 function gasWalkNorth(v) { gas[0] = v; }
 function gasWalkSouth(v) { gas[1] = v; }
 function gasWalkEast(v)  { gas[2] = v; }
 function gasWalkWest(v)  { gas[3] = v; }
 
-function Actor (x, y, z, dir, azi) {
-  var self = {x:x, y:y, z:z, dir:dir, azi:azi};
+function actorAvatar (x, y, z, d, a) { // Currently tailored specifically for user avatars.
+
   var jumper = null;
-  self.tick = function () {
+  var act = function (pg, state) { // this polygroupCanvas, state current just {:time}
+    // jumping
+    if (jumper) {
+      let xyz = jumper(currentTime);
+      if (xyz.done) {
+        jumper = null;
+      }
+      self.x += xyz.dx;
+      self.y += xyz.dy;
+      self.z += xyz.dz;
+    }
     // Normal walking/strafing.
     if (gas[0] || gas[1] || gas[2] || gas[3]) {
       var d = self.dir + [[PI315,PI0,PI45],[PI270,PI0,PI90],[PI225,PI180,PI135]][gas[0]-gas[1]+1][gas[2]-gas[3]+1];
       self.x += sin(d) * .2;
       self.y += cos(d) * .2;
     }
-    // Jumping
-    if (jumper) {
-      let xyz = jumper.tick(currentTime);
-      self.setxyz(xyz);
-      if (self.z < 0.0) {
-        self.z = 0.0;
-        jumper = null;
-      }
-    } // jumping
-    return self;
+
+    pg.leftMulXform(tmatTrans(self.x, self.y, self.z)
+                    .tmatRotZ(-self.dir));
+
+    self.pg = pg;
   };
+
+  const self = function (pg, state) {
+    act(pg, state);
+  }
+
+  self.uid = -1;
+  self.x = x;
+  self.y = y;
+  self.z = z;
+  self.dir = d;
+  self.azi = z;
+  self.original = {x:x, y:y, z:z, dir:d};
+
   self.jump = function () {
     if (jumper) return;
-    jumper = Body(Trajectory(self, 5, -avatar.azi, 10), currentTime); // grav ang vel
+    jumper = actionBouncingTrajectory(self, 10, 8, currentTime, 2); // initialActor grav vel max-bounc time-zero
     return self;
   };
+
   self.dump = function () {
-    return `[[${self.x} ${self.y} ${self.z} ${self.dir} ${self.azi}]]`;
+    return `[${self.x} ${self.y} ${self.z} ${self.dir} ${self.azi}]`;
   };
+
+  //Object.defineProperties(self, {
+  //  x: { get: function () { return x; },
+  //       set: function (v) { return x=v; }},
+  //  y: { get: function () { return y; },
+  //       set: function (v) { return y=v; }},
+  //  z: { get: function () { return z; },
+  //       set: function (v) { return z=v; }}});
+
+  return self;
+}
+
+/* Actor object maker...implements act...everything else if fair game.
+*/
+function actorMissile (actor, gra, vel) {
+  const act = actionBouncingTrajectory(actor, vel, gra, currentTime, 8); // init grav vel bounce time
+  const self = function (pg, state) { // polygroupCanvas, state object = {:time}
+    const loc = act(state.time);
+    self.setxyz(loc);
+    self.dir = actor.dir;
+    self.azi = actor.azi;
+    if (loc.done) {
+      // Reset the PG's matrix and actor
+      pg.setXform( tmatTrans(loc.x, loc.y, 0.0).tmatScale(.1) )
+        .setActor( (pg, state) => pg.rightMulXform(tmatRotZ(state.time/100)) );
+      if (cannon == self) { cannon = null; } // global cannon object that the camera becomes for a bit
+    } else {
+      // Is this projectile somenoe elses and is it close to me?
+      DB.post("miss", actor.uid + " " + avatar.uid);
+      if ((actor.uid != avatar.uid) && avatar.distxyz(loc) < 1) {
+        avatar.setxyzd(avatar.original); // Reset my avatar location back to home.
+      }
+      // Transform the PG
+      pg.leftMulXform(tmatTrans(loc.x, loc.y, loc.z).tmatRotZ(state.time/50));
+    }
+    self.pg = pg;
+  }
+  self.setxyzda(actor);
+  // self.dump = function () { return `[[${self.x} ${self.y} ${self.z} ${self.dir} ${self.azi}]]`; };
   return self;
 }
 
 
 
-var avatar = null;
+/*******************************************************************************
+ Spawn entities.  These are renderable PGs that have an Actor assigned to them
+ that will mutate the PG after every tick.
+*******************************************************************************/
 
-/* Spawn the user's Actor represented by the user's controllable avatar.  It's also used
-   as the camera viewpoint.
+/* Create the new cannon projectile actor using the passed actor as a starting point.
 */
-function spawnAvatar (x, y, z, d, a) {
-  avatar = Actor(x, y, z, d, a);
-  avatar.ox = x;
-  avatar.oy = y;
-  avatar.oz = z;
-  return pcGen("avatar", pmGen18gon())
-         .setXform(tmatScale(.5))
-         .setAni( (pc, state) => { // this polygroupCanvas, state current just {:time}
-           avatar.tick();
-           pc.leftMulXform(tmatTrans(avatar.x, avatar.y, avatar.z)
-                           .tmatRotZ(-avatar.dir))} );
+var cannon;
+var followAfter = 0;
+function spawnCannon (parent) {
+  var actor = actorMissile(parent, 4, 10); // velocity
+  if (parent.uid == avatar.uid) {
+    cannon = actor; 
+    followAfter = currentTime + 100
+  }
+  scene.push(pgGen("cannon", pmGen18gon())
+             .setXform(tmatScale(.1)) // Cannons are bAby avatars.
+             .setActor(actor));
 }
 
-/***************************************
- Create a new Ghost object/actor.
-***************************************/
+
+/*
+ Create a new Ghost object/actor.  This is the older style actor/entity.
+*/
 function spawnGhost (x, y) {
   let e = new Entity("ghost", [x, y, 0.5], 4); // BF TODO Entity to be refactored into Actor
-  return pcGen("ghost", pmGenGhost())
-         .setAni((pc, state) => {
+  return pgGen("ghost", pmGenGhost())
+         .setActor( (pg, state) => {
            e.tick(currentTime);
-           pc.leftMulXform(tmatTrans(e.locam.x, e.locam.y, 0)
+           pg.leftMulXform(tmatTrans(e.locam.x, e.locam.y, 0)
                            .tmatRotZ((e.diram)/8 * PI360));
-           collision = collision || (distLocLoc(avatar.x, avatar.y, avatar.z, e.locam) < .6) // Detect collision between this ghost and pacman
+           collision = collision || (avatar.distxyz(e.locam) < .6) // Detect collision between ghost and avatar.
          } );
 }
 
-
-/*******************************************************************************
+/*
  Create a bunch of spinning blocks around the arena.
-*******************************************************************************/
+*/
 function spawnThunderDome () {
   var a;
   /* A perimeter of towers*/
   for (a=0; a<4000; a+=8) {
     scene.push(
-      pcGen("dome", pmGenCubeRainbow())
+      pgGen("dome", pmGenCubeRainbow())
       .setXform(tmatTrans(30, 30, 0)
                 .tmatRotZ(a*PI1)
                 .tmatRotX(a*PI1/60)
                 .tmatTrans(0, 100, 0)
                 .tmatScale(5)
                )
-      .setAni( (pc, state) =>
-        pc.rightMulXform(tmatRotZ(currentTime/20*PI1)
+      .setActor( (pg, state) =>
+        pg.rightMulXform(tmatRotZ(currentTime/20*PI1)
                          .tmatRotY(currentTime/10*PI1)
-                         .tmatRotX(currentTime/10*PI1)) ));
+                         .tmatRotX(currentTime/10*PI1)) )
+    );
   }
 }
 
-
-/* Helpful helpers.
+/* Spawn the user's Actor represented by the user's controllable avatar.  It's also used
+   as the camera viewpoint.
 */
+var avatar = null;
+function spawnAvatar (x, y, z, d, a) {
+  return pgGen("avatar", pmGen18gon())
+         .setXform( tmatScale(.5) )
+         .setActor( avatar = actorAvatar(x, y, z, d, a) );
+}
+
+/*
+ Spawn an Opponent entity.
+*/
+const opponents = []
+
+function spawnNewOpponent (uid) {
+  const actor = {x:0, y:0, z:0, d:0, update:true};
+  opponents[uid] = actor;
+  scene.push(
+    pgGen("opponent", pmGen18gon())
+    .setActor( (pg, state) => {
+      // Since only updated after an IPC message, set the xform each time so it's there next frame.
+      if (actor.update) {
+        pg.setXform(tmatTrans(actor.x, actor.y, actor.z)
+                    .tmatRotZ(-actor.d)
+                    .tmatScale(.5))
+        actor.update = false;
+      }
+    } ));
+  DB("spawned opponent" + uid);
+  return actor;
+}
+
+
+
+
+/******************************************************************************
+ Helpful helpers.
+******************************************************************************/
+
 function genCameraTransform (actor) {
   return tmatRotX(actor.azi)
          .tmatRotZ(actor.dir)
@@ -1381,34 +1474,28 @@ function genCameraTransform (actor) {
 }
 
 function ipcSendMyPosition () {
-  if (nextTimeIPC <= currentTime &&
+  if (ipcNextWriteTime <= currentTime &&
       socket.readyState &&
       0 <= avatar.uid &&
-      (last.d != avatar.dir ||
-       last.x != avatar.x ||
-       last.y != avatar.y ||
-       last.z != avatar.z)) {
-    //var b = Uint8Array.alloc(1+1+8+8+8);
-    last.d = avatar.dir;
-    last.x = avatar.x;
-    last.y = avatar.y;
-    last.z = avatar.z;
+      (ipcLast.x != avatar.x ||
+       ipcLast.y != avatar.y ||
+       ipcLast.z != avatar.z ||
+       ipcLast.dir != avatar.dir)) {
+    ipcLast.setxyzd(avatar);
 
     var buff = new ArrayBuffer(17);
     var db = new DataView(buff);
     db.setUint8(0, 1); // 1 is move
-    db.setFloat32(1, last.d);
-    db.setFloat32(5, last.x);
-    db.setFloat32(9, last.y);
-    db.setFloat32(13, last.z);
-    //DB(`<${buff.byteLength}< ${last.d} ${last.x} ${last.y}`);
+    db.setFloat32(1, ipcLast.x);
+    db.setFloat32(5, ipcLast.y);
+    db.setFloat32(9, ipcLast.z);
+    db.setFloat32(13, ipcLast.dir);
     if (socket.readyState == socket.OPEN) { socket.send(buff); }
-    nextTimeIPC = currentTime + 50;
+    ipcNextWriteTime = currentTime + 50;
   }
 }
 
 function ipcSendMyCannon (x, y, z, d, a, v) {
-  console.log(avatar.uid);
   if ( (socket.readyState) && (0 <= avatar.uid) ) {
 
     var buff = new ArrayBuffer(25); // Try Uint8Array([2,x,y,z,d]) ? BF TODO
@@ -1425,66 +1512,62 @@ function ipcSendMyCannon (x, y, z, d, a, v) {
   }
 }
 
+
 /***************************************
   Globals
 ***************************************/
-var last = {};
 var quit = false;
-var currentTime = getTime();
-var nextTimeIPC = currentTime;
+var currentTime = getTime(); // The render loop updates this every goaround.
+var frameRateTime = currentTime;
+var frameRate=0;
+var frameCount=0;
 var collision = false;
 var scene = []; // Simple array of renderable object groups.
 var elevation = .5;
 var parentStyle = window.getComputedStyle(canvas.parentElement); // Adjust canvas size to parent's size
+var button0Down = false;
+var hud = true;
+var ipcLast = {};
+var ipcNextWriteTime = currentTime;
 
-/***************************************
-  Main
-***************************************/
-function Main () {
-  DB("::JavaScriptArtilleryClientV3.0.d");
-  var hud = true;
-  var mouseRotX=0, mouseRotY=0;
-  var frameRateTime=currentTime;
-  var frameCount=0;
-  var frameRate=0;
 
-  function quitToggle () { DB("QUIT"); quit ^= 1; }
-  function hudToggle () { hud ^= 1; }
-  function heightAdd (x) { elevation += x;  /*if (elevation < 0) elevation = 0;*/ if (400 < 400) elevation = 400; }
+/*******************************************************************************
+ Render Loop -- All the animation occurs in this block
+*******************************************************************************/
+function mainRenderLoop () {
+  currentTime = getTime();
+  var clear = 1;
+  var state = {time:currentTime};
+  var sortedVisibleScene=[];
 
-  spawnObjectsFromMap();
-  spawnThunderDome();
+  scene.forEach( (pg) => pg.reset().act(state) ); // Reset and 'tick' each object.
 
-  /* Render Loop -- All the animation occurs in this block
-  */
-  function mainRenderLoop () {
-    var clear = 1;
-    var state = {time:currentTime};
-    var sortedVisibleScene=[];
-    var pgMatScene;
-
-    currentTime = getTime();
-    scene.forEach ( pg => pg.reset().tick(state) ); // Reset and 'tick' each object.
-    pgMatScene = genCameraTransform(avatar); // Camera transformation matrix.
+  var camera = (followAfter <= currentTime && button0Down && cannon || avatar);
+  var cameraTrans = genCameraTransform( camera ); // Camera transformation matrix.
 
     /* Combine camera xform with each object and apply to the center point.
     Those objects with center point in front of camera go on to the renering phase. */
     scene.forEach ( pg => {
-      pg.leftMulXform(pgMatScene) // Combine the individual transform with the camera's transform
+      pg.leftMulXform(cameraTrans) // Combine the individual transform with the camera's transform
         .xformCenter(); // Transform just the center vertex for now
-      if (!pgPerspective(pg.getCenter(), 400)) { // Collect groups in front of camera
+      if (0 <= pg.getCenter()[1]) { // Collect groups in front of camera
         sortedVisibleScene.push(pg);
       }
     } );
 
     if (clear) { clearContext(width, height);  clear = 0; }
 
-    // Sort all objects, along y, then transform each vertex with their xfrom matrix, then plot.
+    // Sort all objects, on distance to camera/origin, then transform each vertex with their xfrom matrix, then plot.
     sortedVisibleScene
-    .sort( (a,b) => b.getCenter()[1] - a.getCenter()[1] )
+    .map( (pg) => {
+      var cent = pg.getCenter();
+      pg.dist = square(cent[0]) + square(cent[1]) + square(cent[2]);
+      return pg;
+    } )
+    .sort( (a,b) => b.dist - a.dist )
     .forEach ( (pg) => {
       pg.xformPoints();
-      if (pgPerspective(pg.getPoints(), 400)) return; // skips if any point is behind camera
+      if (pgPerspective(pg.getPoints(), 500)) return; // skips if any point is behind camera
       pgScale(pg.getPoints(), 1, 50, 1); // Stretch along y-axis so normal calculations are more sane
       var points = pg.getPoints();
       pg.getFaces().forEach ( (face) => {
@@ -1559,8 +1642,84 @@ function Main () {
 
     if (!quit) setTimeout(function(){mainRenderLoop()}, 10);
     else DB ("done.");
+}
 
-  } // mainRenderLoop()
+
+
+/*******************************************************************************
+ IPC
+*******************************************************************************/
+const socket = new WebSocket('ws://world.dv8.org:7199')
+
+socket.binaryType = "arraybuffer";
+
+socket.onopen = function (event) {
+  DB("websocket connected.");
+}
+
+socket.onclose = function (event) {
+  DB("websocket closed.");
+}
+
+socket.onmessage = function (event) {
+  var msg = event.data, player;
+  var ca = new Int8Array(msg);
+  //DB.post("onmessage", ` msg.len=${msg.byteLength || msg.length} ${ca}`);
+  if (typeof msg == "string") { // String messages are just echoed to console.
+    //DB.post("str", msg);
+  } else if (msg instanceof ArrayBuffer) {
+    var dv = new DataView(msg);
+    var cmd = dv.getUint8(0);
+    var usr = dv.getUint8(1);
+    switch (cmd)  {
+    case 0: // My new user ID from the server.
+      // Create my entity / opponent object.
+      avatar.uid = usr;
+      DB(`[${cmd} ${usr}] NEW ID`);
+      break;
+    case 1:
+      if (usr == avatar.uid) break; // Ignore my own mesage.
+      player = opponents[usr];
+      if (!player) { // Create new opponenet.
+        player = spawnNewOpponent(usr);
+      }
+      player.x = dv.getFloat32(2);
+      player.y = dv.getFloat32(6);
+      player.z = dv.getFloat32(10);
+      player.d = dv.getFloat32(14);
+      player.update = true;
+      //DB(`[${cmd} ${usr}] ` + `${player.d.toFixed(2)} ${player.x.toFixed(2)} ${player.y.toFixed(2)}`);
+      break
+    case 2:
+      if (usr == avatar.uid) break; // Ignore my own message to spawn my own bullet.
+      var x=dv.getFloat32(2),
+          y=dv.getFloat32(6),
+          z=dv.getFloat32(10),
+          d=dv.getFloat32(14),
+          a=dv.getFloat32(18),
+          v=dv.getFloat32(22);
+      spawnCannon ({x:x, y:y, z:z, dir:d, azi:a, uid:usr});
+      //DB(`[${cmd} ${usr}] ` + `${x.toFixed(2)} ${y.toFixed(2)} ${z.toFixed(2)} ${d.toFixed(2)} ${a.toFixed(2)} ${v.toFixed(2)}`);
+    }
+  } else {
+    DB(`[???] ${typeof msg} ${msg}`);
+  }
+}
+
+
+
+/***************************************
+  Main
+***************************************/
+window.onload = function Main () {
+  DB("::JavaScriptArtilleryClientV3.0.d");
+  var mouseRotX=0, mouseRotY=0;
+
+  function quitToggle () { DB("QUIT"); quit ^= 1; }
+  function hudToggle () { hud ^= 1; }
+  function heightAdd (x) { elevation += x; }
+
+  spawnAllObjects();
 
   var flagShift = false;
   var Button_shift = 16;
@@ -1615,10 +1774,17 @@ function Main () {
 
   var enterPointerLock = function () {
     mouseControlsLook();
-    document.body.onclick = function (e) {
+    document.body.onclick = null; // Without clearing onclick, pointer lock is exited.
+    document.body.onmouseup = function (e) {
       if (e.button == 0) {
-        spawnCannon(avatar, 10); // velocity
-        ipcSendMyCannon(avatar.x, avatar.y, avatar.z+0.25, avatar.dir, avatar.azi, 10);
+        button0Down = false;
+      }
+    }
+    document.body.onmousedown = function (e) {
+      if (e.button == 0) {
+        button0Down = true;;
+        spawnCannon(avatar);
+        ipcSendMyCannon(avatar.x, avatar.y, avatar.z, avatar.dir, avatar.azi, 10);
       }
       if (e.button == 2) { avatar.jump(); }
     }
@@ -1630,7 +1796,7 @@ function Main () {
   };
 
   /* Locked mouse pointer state machine. The exit-pointer-lock state
-     is entered at the start.
+     callback is called at the start to force us into the exit state.
   */
   ((locked=1) =>
    document.onpointerlockchange = () => {
@@ -1684,87 +1850,6 @@ function Main () {
   mainRenderLoop();
 } // Main
 
-
-
-window.onload = function () { Main(); }
-
-var socket = new WebSocket('ws://world.dv8.org:7199')
-socket.binaryType = "arraybuffer";
-
-socket.onopen = function (event) {
-  DB("websocket connected.");
-}
-
-socket.onclose = function (event) {
-  DB("websocket closed.");
-}
-
-var players = []
-
-function spawnNewPlayer (uid) {
-  var player = {d:0, x:0, y:0, z:0, update:true};
-  players[uid] = player;
-  DB("spawned player" + uid);
-  scene.push(
-    pcGen("turret", pmGen18gon())
-    .setAni( (pc, state) => {
-      if (player.update) {
-        //DB(`updating player ${player.d.toFixed(2)} ${player.x.toFixed(2)} ${player.y.toFixed(2)}`);
-        pc.setXform(tmatTrans(player.x, player.y, player.z)
-                    .tmatRotZ(-player.d)
-                    .tmatScale(.5))
-        player.update = false;
-      }
-    })
-  );
-  return player;
-}
-
-socket.onmessage = function (event) {
-  var msg = event.data, player;
-  var ca = new Int8Array(msg);
-  //DB.post("onmessage", ` msg.len=${msg.byteLength || msg.length} ${ca}`);
-  if (typeof msg == "string") { // String messages are just echoed to console.
-    //DB.post("str", msg);
-  } else if (msg instanceof ArrayBuffer) {
-    var dv = new DataView(msg);
-    var cmd = dv.getUint8(0);
-    var usr = dv.getUint8(1);
-    switch (cmd)  {
-    case 0: // My new user ID from the server.
-      // Create my entity / turret object.
-      avatar.uid = usr;
-      DB(`[${cmd} ${usr}] NEW ID`);
-      //spawnNewPlayer(usr);
-      break;
-    case 1:                      // User moved and/or rotated.  If new user, create him.
-      if (usr == avatar.uid) break;
-      player = players[usr];
-      if (!player) {
-        player = spawnNewPlayer(usr);
-      }
-      player.d = dv.getFloat32(2);
-      player.x = dv.getFloat32(6);
-      player.y = dv.getFloat32(10);
-      player.z = dv.getFloat32(14);
-      player.update = true;
-      //DB(`[${cmd} ${usr}] ` + `${player.d.toFixed(2)} ${player.x.toFixed(2)} ${player.y.toFixed(2)}`);
-      break
-    case 2:
-      if (usr == avatar.uid) break; // Ignore my own message to spawn my own bullet.
-      var x=dv.getFloat32(2),
-          y=dv.getFloat32(6),
-          z=dv.getFloat32(10),
-          d=dv.getFloat32(14),
-          a=dv.getFloat32(18),
-          v=dv.getFloat32(22);
-      spawnCannon ({x:x, y:y, z:z, dir:d, azi:a, uid:usr}, v);
-      //DB(`[${cmd} ${usr}] ` + `${x.toFixed(2)} ${y.toFixed(2)} ${z.toFixed(2)} ${d.toFixed(2)} ${a.toFixed(2)} ${v.toFixed(2)}`);
-    }
-  } else {
-    DB(`[???] ${typeof msg} ${msg}`);
-  }
-}
 
 
 </script></html>
