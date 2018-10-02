@@ -162,6 +162,7 @@ var sin = Math.sin;
 var cos = Math.cos;
 var atan = Math.atan;
 var abs = Math.abs;
+var sqrt= Math.sqrt;
 var square = function (x) {return x*x;}
 var getTime = function () { return (new Date).getTime(); }
 var eqpair = function (a, b) {return a.x==b.x && a.y==b.y;}
@@ -198,9 +199,9 @@ Object.prototype.setxyzda = function (o) {
 }
 
 Object.prototype.distxyz = function (loc) {
-  return Math.sqrt(square(this.x - loc.x) +
-                   square(this.y - loc.y) +
-                   square(this.z - loc.z));
+  return sqrt(square(this.x - loc.x) +
+              square(this.y - loc.y) +
+              square(this.z - loc.z));
 }
 
 Array.prototype.dist = function (o) {
@@ -208,6 +209,10 @@ Array.prototype.dist = function (o) {
          square(this[1] - o[1]) +
          square(this[2] - o[2]);
 };
+
+Array.prototype.magnitudeish = function (o) {
+  return this[0]*this[0] + this[1]*this[1] + this[2]*this[2];
+}
 
 Array.prototype.groupby = function (l) { // Group a vector into length l sub vectors.
   return this.reduce( (r,v,i,a) => (i%l || r.push(a.slice(i,i+l)), r), []);
@@ -233,10 +238,15 @@ Object.prototype.length = function () {
 // In 3D land, radians are king and used often but I'm used to degrees thus these constants.
 var PI0   = 0.00000000000000000
 var PI1   = 0.017453292519943295
+var PI2   = 0.03490658503988659
 var PI10  = 0.17453292519943295
+var PI30  = 0.5235987755982988
 var PI45  = 0.7853981633974483
+var PI60  = 1.0471975511965976
+var PI70  = 1.2217304763960306
 var PI80  = 1.3962634015954636
 var PI90  = 1.5707963267948966
+var PI120 = 2.0943951023931953
 var PI135 = 2.356194490192345
 var PI180 = 3.141592653589793
 var PI225 = 3.9269908169872414
@@ -254,6 +264,7 @@ var context = canvas.getContext('2d');
 var width = canvas.width = document.body.clientWidth;
 var height = canvas.height = document.body.clientHeight;
 context.translate(width/2, height/2); // Set canvas's origin to center
+
 
 function clearContext (width, heigth) { // Erase entire canvas.
   if (collision) {
@@ -334,18 +345,22 @@ function Ticker () {
 function Entity (label, aryam, dir0) {
   this.label = label;
 
-  this.locticker = new Ticker();
-  this.locfr = {x:aryam[0], y:aryam[1], z:aryam[2]}; // Initial position, beginning tick range
-  this.locam = {x:aryam[0], y:aryam[1], z:aryam[2]}; // Actual location, ticking to locbe
-  this.locbe = {x:aryam[0], y:aryam[1], z:aryam[2]}; // Final position, end of tick range
-  this.locgo = false;                                // Next potential position (based on dirgo)
+  this.reset = function () {
+    this.locticker = new Ticker();
+    this.locfr = {x:aryam[0], y:aryam[1], z:aryam[2]}; // Initial position, beginning tick range
+    this.locam = {x:aryam[0], y:aryam[1], z:aryam[2]}; // Actual location, ticking to locbe
+    this.locbe = {x:aryam[0], y:aryam[1], z:aryam[2]}; // Final position, end of tick range
+    this.locgo = false;                                // Next potential position (based on dirgo)
 
-  this.dirticker = new Ticker();
-  this.dirfr = dir0; // Initial direction, beginning of tick range
-  this.diram = dir0; // Actual direction, ticking to dirbe
-  this.dirbe = dir0; // Final direction, end of tick range
-  this.dirgo = false; // Future direction for the next tick range
-  this.speed = 1000-rnd(7000);
+    this.dirticker = new Ticker();
+    this.dirfr = dir0; // Initial direction, beginning of tick range
+    this.diram = dir0; // Actual direction, ticking to dirbe
+    this.dirbe = dir0; // Final direction, end of tick range
+    this.dirgo = false; // Future direction for the next tick range
+    this.speed = 1000-rnd(100);
+  }
+
+  this.reset();
 
   /* Get the cardinal distance between dirfr and dirbe [0-8).  dirfr and dirbe should be [0-8).
   */
@@ -583,7 +598,8 @@ function pmGenCubeRGB (l=0.5) {
             {label:"right",  fill:"004f", edge:"00ff", face: [2,  1,  5,  6]}]};
 };
 
-function pmGenCubeSolid (l=0.5, f="008f", e="00ff") {
+function pmGenCubeSolid (f="008f", e="00ff") {
+  var l = 0.5;
   return {
     points: [-l, -l, -l,   l, -l, -l,   l, l, -l,   -l, l, -l,
              -l, -l,  l,   l, -l,  l,   l, l,  l,   -l, l,  l],
@@ -595,13 +611,54 @@ function pmGenCubeSolid (l=0.5, f="008f", e="00ff") {
             {label:"right",  fill:f, edge:e, face: [2,  1,  5,  6]}]};
 };
 
-function pmGenFloor (l=0.5, f="00ff", e="008f") {
+function pmGenFloor (f="00ff", e="008f") {
+  var l = 0.5;
   return {
     points: [-l,-l,0,  l,-l,0,  l,l,0,  -l,l,0],
     faces:  [{label:"floor", fill:f, edge:e, face: [0, 3, 2, 1]}]};
 }
 
-function pmGenPyramidSolid (l=0.5, f="0f0f", e="080f") {
+
+function pmGen4Gon (f="aaaf", e="ffff") {
+  var u = sqrt(1/3); // length from tip to center of a triangle.
+  var w = sqrt(1/12);// lengh from center of an edge to the triangle center.
+  var h = sqrt(2/3); // heigh from tip to the opposite base, perpendicular.
+  var j = sqrt(1/24); // height from base to the volumetric center (perpindecular, towards tip).
+  return {
+    points: [0,u,-j,  -.5,-w,-j,  .5,-w,-j,  0,0,h-j],
+    faces: [{label:"bottom", fill:f, edge:e, face:[0,1,2]},
+            {label:"left", fill:f, edge:e, face:[1,0,3]},
+            {label:"right", fill:f, edge:e, face:[0,2,3]},
+            {label:"back", fill:f, edge:e, face:[2,1,3]}  ]};
+}
+
+var p = pmGen4Gon().points;
+console.log('============================');
+console.log( [ p[0], p[1], p[2] ].dist( [ p[3], p[4], p[5] ] ));
+console.log( [ p[3], p[4], p[5] ].dist( [ p[6], p[7], p[8] ] ));
+console.log( [ p[6], p[7], p[8] ].dist( [ p[0], p[1], p[2] ] ));
+console.log( [ p[9], p[10], p[11] ].dist( [ p[0], p[1], p[2] ] ));
+console.log( [ p[9], p[10], p[11] ].dist( [ p[3], p[4], p[5] ] ));
+console.log( [ p[9], p[10], p[11] ].dist( [ p[6], p[7], p[8] ] ));
+
+console.log( [ p[9], p[10], p[11] ].dist( [ 0,0,0 ] ));
+console.log( [ p[0], p[1], p[2] ].dist( [ 0,0,0 ] ));
+console.log( [ p[4], p[5], p[6] ].dist( [ 0,0,0 ] ));
+console.log( [ p[6], p[7], p[8] ].dist( [ 0,0,0 ] ));
+
+function pmGenPyramidSolid (f="0f0f", e="080f") {
+  var l = 0.5;
+  return {
+    points: [-l,-l,0,  l,-l,0,  l,l,0,  -l,l,0,  0,0,l*2],
+    faces: //[["bottom", fill, edge], 0, 1, 2, 3],
+           [{label:"front", fill:f, edge:e, face:[ 1, 0, 4]},
+            {label:"left",  fill:f, edge:e, face:[ 0, 3, 4]},
+            {label:"back",  fill:f, edge:e, face:[ 3, 2, 4]},
+            {label:"right", fill:f, edge:e, face:[ 2, 1, 4]}]};
+}
+
+function pmGenPyramidSolid (f="0f0f", e="080f") {
+  var l = 0.5;
   return {
     points: [-l,-l,0,  l,-l,0,  l,l,0,  -l,l,0,  0,0,l*2],
     faces: //[["bottom", fill, edge], 0, 1, 2, 3],
@@ -749,19 +806,26 @@ var Rgb = (function () {
     var r = parseInt(rgba.charAt(0), 16)*17;
     var g = parseInt(rgba.charAt(1), 16)*17;
     var b = parseInt(rgba.charAt(2), 16)*17;
-    var a = parseInt(rgba.charAt(3), 16)/15 || 1
+    var a = parseInt(rgba.charAt(3), 16)*17 || 255;
 
-    var self = cacheRgb[rgba] = {rgba:rgba}
+    var self = cacheRgb[rgba] = [];
 
     self.cssStr = function (n) {
       var nc = Math.ceil(n*100);
-      var v = self[nc];
+      var s, v = self[nc];
       if ( v ) {
         //DB.post("hit", `${cacheRgb.length()} ${self.length()} ${rgba}[${nc}]`);
         return v;
       } else {
-        v = self[nc] = `rgba(${(n*r)|0},${(n*g)|0},${(n*b)|0},${a.toFixed(2)})`;
-        //console.log(`${cacheRgb.length()} ${self.length()} ${rgba}[${nc}] ${v}`);
+        s = "#" + 
+            ("0"+(n*r|0).toString(16)).slice(-2) +
+            ("0"+(n*g|0).toString(16)).slice(-2) +
+            ("0"+(n*b|0).toString(16)).slice(-2) +
+            ("0"+(a|0).toString(16)).slice(-2);
+        //s = `rgba(${(n*r)|0},${(n*g)|0},${(n*b)|0},${a.toFixed(2)})`;
+              
+        v = self[nc] = s;
+        //console.log(`${cacheRgb.length()} ${self.length} ${rgba}[${nc}] ${v} ${a}`);
         return v;
       }
     }
@@ -774,7 +838,7 @@ var Rgb = (function () {
     console.log(` ${v.rgba} ${v.length()}`);
   } )};
 
-  cons.cache = cacheRgb;
+  //cons.cache = cacheRgb;
   return cons; // Return the constructor
 })();
 
@@ -812,6 +876,8 @@ var pmNormalizeFace = function (face) {
 function pgGen (label, pm) {
   // Static Fields
   var self = {label:label};
+  var dieAt = false;
+  var dead = false;
   var points = pm.points;
   var count = points.length/3;
   var faces = pm.faces.map(pmNormalizeFace);
@@ -825,9 +891,13 @@ function pgGen (label, pm) {
   var txform =  [];
 
   // Methods
+  self.dieIn = function (d) { dieAt = d + currentTime; return self; }
 
   self.setActor = function (a) { actor = a; return self; }
-  self.act      = function (state) { actor && actor(self, state); return self; }
+  self.act      = function (state) {
+    self.dead = self.dead || (dieAt && dieAt < state.time )
+    actor && actor(self, state); return self;
+  }
 
   self.reset = function () { // Reset canvas
     txform = null;
@@ -1152,7 +1222,7 @@ var arena = [
 "                                                                ",
 "                                                                ",
 "                                                                ",
-"                                                                ",
+"                               t                                ",
 "                              xxx                            | |",
 " T                            xAx                             T ",
 "                              xxx                            | |"].reverse();
@@ -1172,7 +1242,7 @@ function spawnObjectsFromMap () {
             //scene.push(pgGen("floor", pmGenFloor()).setXform(tmatTrans(x,y,0)))
             break;
           }
-          case " " : if (!rnd(60)) {
+          case " " : if (!rnd(200)) {
             i = rnd(20);
             while (0 < i--) {
               let ii = i;
@@ -1181,15 +1251,26 @@ function spawnObjectsFromMap () {
                          .setActor( (pg, state) => { pg.rightMulXform(tmatRotZ((ii*200+state.time)/(1000))) } )
                         );
             }
+          } else if (!rnd(1000)) {
+            scene.push(pgGen("cannon", pmGen4Gon())
+                       .setXform(tmatTrans(x,y,0))
+                       .setActor( (pg, state) => {
+                         pg.leftMulXform( tmatTrans(0,0,20+20*cos(x+y+state.time/10000))
+                         )
+                       } )
+            );
           } else if (!rnd(40)) {
             //scene.push(pgGen("maze", pmGenCubeRainbow()).setXform(tmatTrans(x,y,0).tmatScale(1,1,9).tmatTrans(0,0,.5)));
           } else if (!rnd(40)) {
             //scene.push(pgGen("wall", pmGenCubeSolid()).setXform(tmatTrans(x,y,0).tmatScale(1,1,5).tmatTrans(0,0,.5)));
           }
-          break;
+          //break;
           case "x" : { // road
-            scene.push(pgGen("floor", pmGenFloor(0.5, "0481", "08ff"))
-                       .setXform(tmatTrans(x,y,0)))
+            if (true || x%2 != y%2) {
+              scene.push(pgGen("floor", pmGenFloor("048f", "08ff")).setXform(tmatTrans(x,y,0)));
+            } else {
+              //scene.push(pgGen("floor", pmGenCubeSolid("048f", "08ff")).setXform(tmatTrans(x,y,-.5)));
+            }
             break;
           }
           case "A" : { // special case for user's avatar
@@ -1197,11 +1278,13 @@ function spawnObjectsFromMap () {
             break;
           }
           case "g" : { // special case for ghost
-            scene.push(spawnGhost(x, y));
+            var g = spawnGhost(x, y);
+            ghosts.push(g);
+            scene.push(g);
             break;
           }
           case "T" : {
-            scene.push(pgGen("iotower", pmGenPyramidSolid(0.5, "f00f", "800f")).setXform(tmatTrans(x,y,0).tmatScale(1,1,100)));
+            scene.push(pgGen("iotower", pmGenPyramidSolid("f00f", "800f")).setXform(tmatTrans(x,y,0).tmatScale(1,1,100)));
             break;
           }
           case "p" : { // turrent (the player AKA pacman AKA the cannon/opponent)  For now the fake opponent
@@ -1215,6 +1298,27 @@ function spawnObjectsFromMap () {
             scene.push(pgGen("wall", pmGenCubeSolid()).setXform(tmatTrans(x,y,0).tmatScale(1,1,5).tmatTrans(0,0,.5)));
             break;
           }
+          case "t" : {
+            //scene.push(pgGen("floor", pmGenFloor("048f", "08ff")).setXform(tmatTrans(x,y,-.1)));
+            scene.push(pgGen("cannon", pmGen4Gon("fff9", "ffff")).setXform(tmatTrans(x,y,0))
+                                                                 .setActor( (pg, state) => {
+                                                                           var t = state.time/3000;
+                                                                           pg.rightMulXform(tmatRotX(t)
+                                                                                            .tmatRotZ(PI60)); }));
+            scene.push(pgGen("cannon", pmGen4Gon("fff9", "ffff")).setXform(tmatTrans(x,y,0))
+                                                                 .setActor( (pg, state) => {
+                                                                           var a=0, b=0, c=0, t=(state.time/3000).toFixed(0) % 3;
+                                                                           t=3;
+                                                                           switch (t) {
+                                                                             case 0 : a = state.time/54; break;
+                                                                             case 1 : b = state.time/54; break;
+                                                                             case 2 : c = state.time/54; break;
+                                                                           };
+                                                                           pg.rightMulXform(tmatTrans(0,0,0)
+                                                                                            .tmatRotX(a)
+                                                                                            .tmatRotY(b)
+                                                                                            .tmatRotZ(c)); }));
+          }
         } // switch
       } // for x
   } );
@@ -1226,7 +1330,8 @@ function spawnAllObjects () {
 }
 
 /**************************************************************
- Time-parameterized functions that return a bare actor blob.
+ Actions
+ Time-parameterized functions that return a pseudo actor blob.
 **************************************************************/
 
 function actionBouncingTrajectory (actor, velocity, gravity, start=getTime(), bounces=0) {
@@ -1294,8 +1399,8 @@ function actorAvatar (x, y, z, d, a) { // Currently tailored specifically for us
     // Normal walking/strafing.
     if (gas[0] || gas[1] || gas[2] || gas[3]) {
       var d = self.dir + [[PI315,PI0,PI45],[PI270,PI0,PI90],[PI225,PI180,PI135]][gas[0]-gas[1]+1][gas[2]-gas[3]+1];
-      self.x += sin(d) * .2;
-      self.y += cos(d) * .2;
+      self.x += sin(d) * .1;
+      self.y += cos(d) * .1;
     }
 
     pg.leftMulXform(tmatTrans(self.x, self.y, self.z)
@@ -1318,7 +1423,9 @@ function actorAvatar (x, y, z, d, a) { // Currently tailored specifically for us
 
   self.jump = function () {
     if (jumper) return;
-    jumper = actionBouncingTrajectory(self, 10, 8, currentTime, 2); // initialActor grav vel max-bounc time-zero
+    self.azi -= PI80;
+    jumper = actionBouncingTrajectory(self, 20, 8, currentTime, 1); // initialActor grav vel max-bounc time-zero
+    self.azi += PI80;
     return self;
   };
 
@@ -1348,14 +1455,21 @@ function actorMissile (actor, gra, vel) {
     self.azi = actor.azi;
     if (loc.done) {
       // Reset the PG's matrix and actor
-      pg.setXform( tmatTrans(loc.x, loc.y, 0.0).tmatScale(.1) )
+      pg.dieIn(1000)
+        .setXform( tmatTrans(loc.x, loc.y, 0.0).tmatScale(.1) )
         .setActor( (pg, state) => pg.rightMulXform(tmatRotZ(state.time/100)) );
       if (cannon == self) { cannon = null; } // global cannon object that the camera becomes for a bit
     } else {
       // Is this projectile somenoe elses and is it close to me?
-      DB.post("miss", actor.uid + " " + avatar.uid);
       if ((actor.uid != avatar.uid) && avatar.distxyz(loc) < 1) {
         avatar.setxyzd(avatar.original); // Reset my avatar location back to home.
+      } else if (actor.uid == avatar.uid) { // This is my missle...did it hit a ghost?
+        ghosts.forEach( (pg, i) => {
+          var entity = pg.entity;
+          if ( entity.locam.distxyz(loc) < .5) {
+            entity.reset();
+          }
+        } );
       }
       // Transform the PG
       pg.leftMulXform(tmatTrans(loc.x, loc.y, loc.z).tmatRotZ(state.time/50));
@@ -1378,15 +1492,26 @@ function actorMissile (actor, gra, vel) {
 */
 var cannon;
 var followAfter = 0;
-function spawnCannon (parent) {
-  var actor = actorMissile(parent, 4, 10); // velocity
+function spawnCannon (parent, gra=4, vel=10) {
+  parent.azi -= PI10
+  var actor = actorMissile(parent, gra, vel); // actor grav velocity
+  parent.azi += PI10
   if (parent.uid == avatar.uid) {
     cannon = actor; 
-    followAfter = currentTime + 100
+    followAfter = currentTime + 150
   }
   scene.push(pgGen("cannon", pmGen18gon())
              .setXform(tmatScale(.1)) // Cannons are bAby avatars.
-             .setActor(actor));
+             .setActor(actor)
+             //.setActor( (pg,state) => {
+             //  actor(pg, state)
+             //  if (!rnd(10)) {
+             //    scene.push(pgGen("smoke", pmGen18gon())
+             //               .dieIn(10000)
+             //               .setXform(tmatTrans(actor.x, actor.y, actor.z)
+             //                         .tmatScale(.01)));
+             //  }} )
+             );
 }
 
 
@@ -1395,13 +1520,18 @@ function spawnCannon (parent) {
 */
 function spawnGhost (x, y) {
   let e = new Entity("ghost", [x, y, 0.5], 4); // BF TODO Entity to be refactored into Actor
-  return pgGen("ghost", pmGenGhost())
+  var pg=pgGen("ghost", pmGenGhost())
          .setActor( (pg, state) => {
            e.tick(currentTime);
            pg.leftMulXform(tmatTrans(e.locam.x, e.locam.y, 0)
                            .tmatRotZ((e.diram)/8 * PI360));
            collision = collision || (avatar.distxyz(e.locam) < .6) // Detect collision between ghost and avatar.
+           //if (!rnd(100)) {
+           //  spawnCannon({uid:696969, x:e.locam.x, y:e.locam.y, z:e.locam.z, dir:e.diram/8*PI360, azi:-PI45}, 5, 5);
+           //}
          } );
+  pg.entity = e;
+  return pg;
 }
 
 /*
@@ -1410,19 +1540,21 @@ function spawnGhost (x, y) {
 function spawnThunderDome () {
   var a;
   /* A perimeter of towers*/
-  for (a=0; a<4000; a+=8) {
+  for (a=0; a<4000; a+=20) {
     scene.push(
       pgGen("dome", pmGenCubeRainbow())
-      .setXform(tmatTrans(30, 30, 0)
-                .tmatRotZ(a*PI1)
-                .tmatRotX(a*PI1/60)
-                .tmatTrans(0, 100, 0)
+      .setXform(
+                tmatRotZ(a*PI1)
+                .tmatRotX(-PI90+a*PI2/50)
+                .tmatTrans(0, 50, 0)
                 .tmatScale(5)
                )
       .setActor( (pg, state) =>
-        pg.rightMulXform(tmatRotZ(currentTime/20*PI1)
-                         .tmatRotY(currentTime/10*PI1)
-                         .tmatRotX(currentTime/10*PI1)) )
+        pg.leftMulXform(tmatTrans(30, 30, 0)
+                        .tmatRotZ(currentTime/500*PI1)
+                        //.tmatRotY(currentTime/20*PI1)
+                        //.tmatRotX(currentTime/20*PI1)
+                       ) )
     );
   }
 }
@@ -1433,7 +1565,7 @@ function spawnThunderDome () {
 var avatar = null;
 function spawnAvatar (x, y, z, d, a) {
   return pgGen("avatar", pmGen18gon())
-         .setXform( tmatScale(.5) )
+         .setXform( tmatScale(.1) )
          .setActor( avatar = actorAvatar(x, y, z, d, a) );
 }
 
@@ -1523,6 +1655,7 @@ var frameRate=0;
 var frameCount=0;
 var collision = false;
 var scene = []; // Simple array of renderable object groups.
+var ghosts = [];
 var elevation = .5;
 var parentStyle = window.getComputedStyle(canvas.parentElement); // Adjust canvas size to parent's size
 var button0Down = false;
@@ -1539,6 +1672,7 @@ function mainRenderLoop () {
   var clear = 1;
   var state = {time:currentTime};
   var sortedVisibleScene=[];
+  var cannons = [];
 
   scene.forEach( (pg) => pg.reset().act(state) ); // Reset and 'tick' each object.
 
@@ -1547,29 +1681,47 @@ function mainRenderLoop () {
 
     /* Combine camera xform with each object and apply to the center point.
     Those objects with center point in front of camera go on to the renering phase. */
+    scene = scene.filter ( pg => !pg.dead )
     scene.forEach ( pg => {
       pg.leftMulXform(cameraTrans) // Combine the individual transform with the camera's transform
         .xformCenter(); // Transform just the center vertex for now
-      if (0 <= pg.getCenter()[1]) { // Collect groups in front of camera
+      var cent = pg.getCenter()
+      if (0 <= cent[1]) { // Collect groups in front of camera
+        pg.mag = cent.magnitudeish(); // Pre-compute distance from center (for painters algorithm)
         sortedVisibleScene.push(pg);
+        if (pg.label == "cannon") { cannons.push(pg); } // Keep track of cannons AKA light sources for now.
       }
     } );
 
     if (clear) { clearContext(width, height);  clear = 0; }
 
+
+    // Dynamic lighting.  On every PG, set its sum of light intensity power between all light sources..
+    sortedVisibleScene.forEach( (pg) => {
+        var pow = 0.05;
+        var c0 = pg.getCenter();
+        cannons.forEach( (pgc) => {
+            var c1 = pgc.getCenter();
+            var dist = 1/(square(c0[0]-c1[0]) +
+                          square(c0[1]-c1[1]) +
+                          square(c0[2]-c1[2]));
+            pow = pow + (isFinite(dist) ? dist : 1);
+        } );
+        if (1 < pow) pow = 1;
+        //console.log(pow);
+        pg.pow = pow;
+    } );
+
+
     // Sort all objects, on distance to camera/origin, then transform each vertex with their xfrom matrix, then plot.
     sortedVisibleScene
-    .map( (pg) => {
-      var cent = pg.getCenter();
-      pg.dist = square(cent[0]) + square(cent[1]) + square(cent[2]);
-      return pg;
-    } )
-    .sort( (a,b) => b.dist - a.dist )
+    .sort( (a,b) => (b.mag - a.mag) )
     .forEach ( (pg) => {
       pg.xformPoints();
       if (pgPerspective(pg.getPoints(), 500)) return; // skips if any point is behind camera
-      pgScale(pg.getPoints(), 1, 50, 1); // Stretch along y-axis so normal calculations are more sane
+      //pgScale(pg.getPoints(), 1, 5, 1); // Stretch along y-axis so normal calculations are more sane
       var points = pg.getPoints();
+
       pg.getFaces().forEach ( (face) => {
         var indices = face.face;
         var i0 = indices[0]*4;
@@ -1580,7 +1732,7 @@ function mainRenderLoop () {
         var v2 = points.slice(i2,i2+3)
         var theNormal = getNormal(v2, v1, v0);
 
-        if (theNormal[1] <=0) { return; }
+        if (theNormal[1] <= 0) { return; }
 
         // Draw the first three points then the rest of the points
         context.beginPath()
@@ -1594,25 +1746,32 @@ function mainRenderLoop () {
         }
 
         // Normal computation for face hilight.
+/*
         var nx = theNormal[0];
         var ny = theNormal[1];
         var nz = theNormal[2];
-        var r = Math.sqrt(nz*nz + ny*ny + nx*nx);
+        var r = sqrt(nz*nz + ny*ny + nx*nx);
         ny = ny / r; // Normalize the normal's y component
+*/
+
+        // Distance from camera
+        //var pow = (1 < v0[1] ) ? .1 + 1/(v0[1]+.1) : 1;
+
+        //pg.pow = ny;
 
         // Render filled area
-
-        context.fillStyle = face.fill.cssStr(ny);
+        context.fillStyle = face.fill.cssStr(pg.pow); // ny = [0..1]
         context.fill();
 
         // Outline the faces
         context.closePath();
-        context.strokeStyle = face.edge.cssStr(.5); // ny
+        context.strokeStyle = face.edge.cssStr(pg.pow); // ny
         context.lineWidth = "1"; // Adjust outline width thicker when closer to camera.
         context.stroke();
 
       } );// forEach face
-    } ) // forEach PC (Polygonal Convex Surface Canvas)
+
+    } ) // forEach PG (Polygonal Convex Surface Canvas)
 
     // Frame rate
     ++frameCount;
@@ -1628,21 +1787,15 @@ function mainRenderLoop () {
       context.textBaseline = "top";
       context.font = "bold 16px Arial";
       context.fillText(`${sortedVisibleScene.length}/${scene.length} ${frameRate.toFixed(1)}`, width/2, -height/2);
-      //DB.post("Rate", frameRate.toFixed(2));
-      //context.fillText("fr   "+pacman.dirfr.toFixed(2) + "(" + pacman.locfr.x.toFixed(2) + " " + pacman.locfr.y.toFixed(2) + ")", -width/2, -height/2+30);
-      //context.fillText("am "+pacman.diram.toFixed(2) + "(" + pacman.locam.x.toFixed(2) + " " + pacman.locam.y.toFixed(2) + ")", -width/2, -height/2+60);
-      //context.fillText("be  "+pacman.dirbe.toFixed(2) + " (" + pacman.locbe.x.toFixed(2) + " " + pacman.locbe.y.toFixed(2) + ")", -width/2, -height/2+90);
-      //context.fillText("go  "+pacman.dirgo,-width/2, -height/2+120);
     }
 
-    // Update server of my wareabouts.  Throttle to 50ms?
-    ipcSendMyPosition();
+    ipcSendMyPosition(); // Update server of my wareabouts.
 
     collision = false;
 
     if (!quit) setTimeout(function(){mainRenderLoop()}, 10);
     else DB ("done.");
-}
+} // mainRenderLoop 
 
 
 
@@ -1784,7 +1937,7 @@ window.onload = function Main () {
       if (e.button == 0) {
         button0Down = true;;
         spawnCannon(avatar);
-        ipcSendMyCannon(avatar.x, avatar.y, avatar.z, avatar.dir, avatar.azi, 10);
+        ipcSendMyCannon(avatar.x, avatar.y, avatar.z, avatar.dir, avatar.azi, 10); // TODO: this shouldn't mutate the actor directly.
       }
       if (e.button == 2) { avatar.jump(); }
     }
@@ -1827,8 +1980,8 @@ window.onload = function Main () {
       case Button_f :     gasWalkEast(1);  break;
       case Button_left :
       case Button_d :     gasWalkWest(1); break;
-      case Button_equals : heightAdd(1); break;
-      case Button_minus  : heightAdd(-1); break;
+      case Button_equals : heightAdd(.25); break;
+      case Button_minus  : heightAdd(-.25); break;
     }
   }
 
@@ -1850,6 +2003,11 @@ window.onload = function Main () {
   mainRenderLoop();
 } // Main
 
+/*
+var img = new Image();
+img.src='http://shroom.dv8.org/daw/catpause.gif'
+var pattern = context.createPattern(img, 'repeat');
+*/
 
 
 </script></html>
