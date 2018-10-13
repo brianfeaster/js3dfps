@@ -955,9 +955,9 @@ function pgGen (label, pm) {
 };
 
 
-function pgScale (points, a, b, c) {
+function pgScale (points, a, b=a, c=b) {
   var i, v;
-  for (i=0; i<points.length; i+=4) { // Over every vector
+  for (i=0; i<points.length; i+=3) { // Over every vector
     points[i] *= a;
     points[i+1] *= b;
     points[i+2] *= c;
@@ -965,18 +965,18 @@ function pgScale (points, a, b, c) {
 }
 
 
-function pgPerspective (vectors, per) {
-  var i, skip=false;
-  for (i=0; i<vectors.length; i+=4) { // Over every vector
+function pgPerspective (vectors, m, s) {
+  var i;
+  for (i=0; i<vectors.length; i+=3) { // Over every vector
    var x = vectors[i+0];
-   var y = vectors[i+1];
+   var y = vectors[i+1]; //if (y <= 0 ) return true;
    var z = vectors[i+2];
-   var p = per / y;
+   var p = m / (y+s);
    vectors[i+0] = x * p;
+   vectors[i+1] = y * p;
    vectors[i+2] = z * p;
-   if (y <= 0 ) skip = true;
   }
-  return skip;
+  return false;
 }
 
 
@@ -1162,9 +1162,6 @@ function tmatMulTmat (x, y) {
   The_map representing the playing field.  Origin is bottom left of this array.
 *******************************************************************************/
 var arena = [
-"| |                                                          | |",
-" T                                                            T ",
-"| |                                                          | |",
 "                                                                ",
 "                                                                ",
 "                                                                ",
@@ -1178,7 +1175,6 @@ var arena = [
 "                                                                ",
 "                                                                ",
 "                                                                ",
-"                       g g g g g g g g g                        ",
 "                                                                ",
 "                                                                ",
 "                                                                ",
@@ -1192,24 +1188,19 @@ var arena = [
 "                                                                ",
 "                                                                ",
 "                                                                ",
-"/                                                              /",//
-"                                                                ",
-"                                                                ",
-"/                                                              /",//
 "                                                                ",
 "                                                                ",
 "                                                                ",
+"/                                                              /",
+"                                                                ",//
+"/                                                              /",
 "                                                                ",
-"                                                                ",
-"                                                                ",
-"                                                                ",
+"                                                                ",//
 "                                                                ",
 "                                                                ",
 "                                                                ",
 "                                                                ",
-"                                                                ",
-"                                                                ",
-"                       g g g g g g g g g                        ",
+"                      g g g g g g g g g g                       ",
 "                                                                ",
 "                                                                ",
 "                                                                ",
@@ -1222,10 +1213,19 @@ var arena = [
 "                                                                ",
 "                                                                ",
 "                                                                ",
-"                               t                                ",
-"                              xxx                            | |",
-" T                            xAx                             T ",
-"                              xxx                            | |"].reverse();
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"                                                                ",
+"  t                                                             ",
+"                               A                                "].reverse();
 
 var mapWithin = function (x, y) { return (0<=x) && (x<arena[0].length) && (0<=y) && (y<arena.length); }
 var mapIsSolid = function (x, y) { return false && mapWithin(x,y) && 5 != arena[y|0][x|0] && 3 != arena[y|0][x|0]; }
@@ -1251,7 +1251,7 @@ function spawnObjectsFromMap () {
                          .setActor( (pg, state) => { pg.rightMulXform(tmatRotZ((ii*200+state.time)/(1000))) } )
                         );
             }
-          } else if (!rnd(1000)) {
+          } else if (!rnd(50)) { // lights
             scene.push(pgGen("cannon", pmGen4Gon())
                        .setXform(tmatTrans(x,y,0))
                        .setActor( (pg, state) => {
@@ -1271,6 +1271,14 @@ function spawnObjectsFromMap () {
             } else {
               //scene.push(pgGen("floor", pmGenCubeSolid("048f", "08ff")).setXform(tmatTrans(x,y,-.5)));
             }
+            break;
+          }
+          case ":" : { // minecraft
+            scene.push(pgGen("floor", pmGenCubeRGB()).setXform(tmatTrans(x,y,1).tmatScale(1,1,2)));
+            break;
+          }
+          case "." : { // minecraft
+            scene.push(pgGen("floor", pmGenCubeRGB()).setXform(tmatTrans(x,y,2.5).tmatScale(1,1,1)));
             break;
           }
           case "A" : { // special case for user's avatar
@@ -1298,26 +1306,27 @@ function spawnObjectsFromMap () {
             scene.push(pgGen("wall", pmGenCubeSolid()).setXform(tmatTrans(x,y,0).tmatScale(1,1,5).tmatTrans(0,0,.5)));
             break;
           }
-          case "t" : {
+          case "t" : { // Perfect Triangle
             //scene.push(pgGen("floor", pmGenFloor("048f", "08ff")).setXform(tmatTrans(x,y,-.1)));
-            scene.push(pgGen("cannon", pmGen4Gon("fff9", "ffff")).setXform(tmatTrans(x,y,0))
+            scene.push(pgGen("cannon", pmGenCubeRGB()).setXform(tmatTrans(x,y,0).tmatRotX(90))
                                                                  .setActor( (pg, state) => {
-                                                                           var t = state.time/3000;
+                                                                           var t = state.time/1000;
                                                                            pg.rightMulXform(tmatRotX(t)
-                                                                                            .tmatRotZ(PI60)); }));
-            scene.push(pgGen("cannon", pmGen4Gon("fff9", "ffff")).setXform(tmatTrans(x,y,0))
-                                                                 .setActor( (pg, state) => {
-                                                                           var a=0, b=0, c=0, t=(state.time/3000).toFixed(0) % 3;
-                                                                           t=3;
-                                                                           switch (t) {
-                                                                             case 0 : a = state.time/54; break;
-                                                                             case 1 : b = state.time/54; break;
-                                                                             case 2 : c = state.time/54; break;
-                                                                           };
-                                                                           pg.rightMulXform(tmatTrans(0,0,0)
-                                                                                            .tmatRotX(a)
-                                                                                            .tmatRotY(b)
-                                                                                            .tmatRotZ(c)); }));
+                                                                                            .tmatRotZ(PI60)); })
+                      );
+            //scene.push(pgGen("cannon", pmGen4Gon("fff9", "ffff")).setXform(tmatTrans(x,y,0))
+            //                                                     .setActor( (pg, state) => {
+            //                                                               var a=0, b=0, c=0, t=(state.time/3000).toFixed(0) % 3;
+            //                                                               t=3;
+            //                                                               switch (t) {
+            //                                                                 case 0 : a = state.time/54; break;
+            //                                                                 case 1 : b = state.time/54; break;
+            //                                                                 case 2 : c = state.time/54; break;
+            //                                                               };
+            //                                                               pg.rightMulXform(tmatTrans(0,0,0)
+            //                                                                                .tmatRotX(a)
+            //                                                                                .tmatRotY(b)
+            //                                                                                .tmatRotZ(c)); }));
           }
         } // switch
       } // for x
@@ -1327,6 +1336,7 @@ function spawnObjectsFromMap () {
 function spawnAllObjects () {
   spawnObjectsFromMap();
   //spawnThunderDome();
+  //scene.push(pgGen("skybox", pmGenCubeSolid()).setXform(tmatTrans(32,32,0).tmatScale(64).tmatTrans(0,0,-.5)));
 }
 
 /**************************************************************
@@ -1399,8 +1409,8 @@ function actorAvatar (x, y, z, d, a) { // Currently tailored specifically for us
     // Normal walking/strafing.
     if (gas[0] || gas[1] || gas[2] || gas[3]) {
       var d = self.dir + [[PI315,PI0,PI45],[PI270,PI0,PI90],[PI225,PI180,PI135]][gas[0]-gas[1]+1][gas[2]-gas[3]+1];
-      self.x += sin(d) * .1;
-      self.y += cos(d) * .1;
+      self.x += sin(d) * .3;
+      self.y += cos(d) * .3;
     }
 
     pg.leftMulXform(tmatTrans(self.x, self.y, self.z)
@@ -1565,7 +1575,7 @@ function spawnThunderDome () {
 var avatar = null;
 function spawnAvatar (x, y, z, d, a) {
   return pgGen("avatar", pmGen18gon())
-         .setXform( tmatScale(.1) )
+         .setXform( tmatScale(.5) )
          .setActor( avatar = actorAvatar(x, y, z, d, a) );
 }
 
@@ -1674,6 +1684,7 @@ function mainRenderLoop () {
   var sortedVisibleScene=[];
   var cannons = [];
 
+  if (clear) { clearContext(width, height);  clear = 0; }
   scene.forEach( (pg) => pg.reset().act(state) ); // Reset and 'tick' each object.
 
   var camera = (followAfter <= currentTime && button0Down && cannon || avatar);
@@ -1686,14 +1697,12 @@ function mainRenderLoop () {
       pg.leftMulXform(cameraTrans) // Combine the individual transform with the camera's transform
         .xformCenter(); // Transform just the center vertex for now
       var cent = pg.getCenter()
-      if (0 <= cent[1]) { // Collect groups in front of camera
+      if (true || 0 <= cent[1]) { // Collect groups in front of camera TODO move this logic to the clipping section.  Bounding box instead of center point??
         pg.mag = cent.magnitudeish(); // Pre-compute distance from center (for painters algorithm)
         sortedVisibleScene.push(pg);
         if (pg.label == "cannon") { cannons.push(pg); } // Keep track of cannons AKA light sources for now.
       }
     } );
-
-    if (clear) { clearContext(width, height);  clear = 0; }
 
 
     // Dynamic lighting.  On every PG, set its sum of light intensity power between all light sources..
@@ -1708,7 +1717,6 @@ function mainRenderLoop () {
             pow = pow + (isFinite(dist) ? dist : 1);
         } );
         if (1 < pow) pow = 1;
-        //console.log(pow);
         pg.pow = pow;
     } );
 
@@ -1718,30 +1726,41 @@ function mainRenderLoop () {
     .sort( (a,b) => (b.mag - a.mag) )
     .forEach ( (pg) => {
       pg.xformPoints();
-      if (pgPerspective(pg.getPoints(), 500)) return; // skips if any point is behind camera
       //pgScale(pg.getPoints(), 1, 5, 1); // Stretch along y-axis so normal calculations are more sane
-      var points = pg.getPoints();
+
+      var initialPoints = pg.getPoints();
 
       pg.getFaces().forEach ( (face) => {
-        var indices = face.face;
-        var i0 = indices[0]*4;
-        var i1 = indices[1]*4;
-        var i2 = indices[2]*4;
-        var v0 = points.slice(i0,i0+3)
-        var v1 = points.slice(i1,i1+3)
-        var v2 = points.slice(i2,i2+3)
-        var theNormal = getNormal(v2, v1, v0);
+        var points = clippedPoints(initialPoints, face.face); // points, indices
+        if (points.length < 0) console.log("no points");
+        //var indices = face.face;
+        // The indices into the vector containging the array of consecutive x,y,z points
+        //var i0 = indices[0]*4;
+        //var i1 = indices[1]*4;
+        //var i2 = indices[2]*4;
+        var v0 = points.slice(0,3)
+        var v1 = points.slice(3,6)
+        var v2 = points.slice(6,9)
 
-        if (theNormal[1] <= 0) { return; }
+        var theNormal = getNormal(v0, v2, v1);
+        var magNorm   = sqrt( theNormal[0]*theNormal[0] + theNormal[1]*theNormal[1] + theNormal[2]*theNormal[2] );
+        var magBase   = sqrt(v0[0]*v0[0] + v0[1]*v0[1] + v0[2]*v0[2]);
+
+        var lenBaseNormal = sqrt(square(v0[0]/magBase+theNormal[0]/magNorm) +
+                                 square(v0[1]/magBase+theNormal[1]/magNorm) +
+                                 square(v0[2]/magBase+theNormal[2]/magNorm));
+
+        if (1.4142135623730951 > lenBaseNormal) { return; } 
+
+        //if (theNormal[1] < 0) { return; }
+
+        if (pgPerspective(points, 900, 1)) return; // skips if any point is behind camera
+        //pgScale(points, 50);
 
         // Draw the first three points then the rest of the points
         context.beginPath()
-        context.moveTo(v0[0], -v0[2]);
-        context.lineTo(v1[0], -v1[2]);
-        context.lineTo(v2[0], -v2[2]);
-        for (var i=3; i<indices.length; ++i) {
-          i0 = indices[i]*4;
-          v0 = points.slice(i0,i0+3);
+        for (var i=0; i<points.length; i+=3) {
+          v0 = points.slice(i,i+3);
           context.lineTo(v0[0], -v0[2]);
         }
 
@@ -1760,7 +1779,7 @@ function mainRenderLoop () {
         //pg.pow = ny;
 
         // Render filled area
-        context.fillStyle = face.fill.cssStr(pg.pow); // ny = [0..1]
+        context.fillStyle = face.fill.cssStr(.1); //pg.pow); // ny = [0..1]
         context.fill();
 
         // Outline the faces
@@ -1797,6 +1816,74 @@ function mainRenderLoop () {
     else DB ("done.");
 } // mainRenderLoop 
 
+/* Find slope, equation of line, solve for C, solve for f(x)=0 to get x=
+*/
+function intercept (x,y,m,n,z) {
+  return x-y*(m-x)/(n-y);
+}
+
+function noClippedPoints(pts, face) {
+  var x,y,z,points=[];
+  face.forEach( (i) => {
+    x=pts[i*4+0];
+    y=pts[i*4+1];
+    z=pts[i*4+2];
+    points.push(x); // Add point as well.
+    points.push(y);
+    points.push(z);
+  } );
+  return points;
+}
+
+function clippedPoints(pts, face) {
+  var c=.5,f,x,y,z,m,n,o,points=[],state=0; // state=?0,out1,in2;
+  face.forEach( (i) => {
+    x=pts[i*4+0];
+    y=pts[i*4+1];
+    z=pts[i*4+2];
+
+    if (c < y)  { // In region.  Save point.
+      if (state == 1) { // Moving from outside to inside region.  Add intercept point.
+        points.push(intercept(x,y,m,n,c));
+        points.push(y);
+        points.push(intercept(z,y,o,n,c));
+      }
+      points.push(x); // Add point as well.
+      points.push(y);
+      points.push(z);
+      state = 2;
+    } else { // Push the z=0 intercept
+      if (state == 2) { // currently in, we've moved out though.  Save the intercept.
+        points.push(intercept(x,y,m,n,c));
+        points.push(y);
+        points.push(intercept(z,y,o,n,c));
+      } // else skip point.
+      state = 1;
+    }
+    m=x; n=y; o=z; // Save last point
+  } );
+  // Connect to beginning again in case it crosses the clip plane.
+  x=pts[face[0]*4+0];
+  y=pts[face[0]*4+1];
+  z=pts[face[0]*4+2];
+  if (c < y)  { // In region.  Save point.
+    if (state == 1) { // Moving from outside to inside region.  Add intercept point.
+      points.push(intercept(x,y,m,n,c));
+      points.push(y);
+      points.push(intercept(z,y,o,n,c));
+    }
+      //points.push(x); // Add point as well.
+      //points.push(y);
+      //points.push(z);
+  } else { // Push the z=0 intercept
+    if (state == 2) { // currently in, we've moved out though.  Save the intercept.
+      points.push(intercept(x,y,m,n,c));
+      points.push(y);
+      points.push(intercept(z,y,o,n,c));
+    } // else skip point.
+  }
+  return points;
+}
 
 
 /*******************************************************************************
